@@ -1,0 +1,78 @@
+#!/usr/bin/make -f
+DEB_PYTHON_SYSTEM=pysupport
+
+# Debhelper must be included before python-distutils to use
+# # # dh_python / dh_pycentral / dh_pysupport
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/rules/simple-patchsys.mk
+include /usr/share/cdbs/1/class/autotools.mk
+include /usr/share/quilt/quilt.make
+QUILT_PATCHES=debian/patches
+QUILT_SERIES=debian/patches/series
+
+# Build variables:
+PYTHONVER = $(shell pyversions -dv)
+DEB_CONFIGURE_EXTRA_FLAGS := --prefix=/usr
+DEB_MAKE_BUILD_TARGET    := all PYTHON=python$(PYTHONVER)
+DEB_MAKE_INSTALL_TARGET = install PYTHON=python$(PYTHONVER) DESTDIR=$(DEB_DESTDIR)
+
+# Variables used by build rules
+DIST_CODE=$(shell lsb_release -sc | tr "[:upper:]" "[:lower:]")
+DIST_ID=$(shell lsb_release -si | tr "[:upper:]" "[:lower:]")
+ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
+VERSION=0.14
+
+CURRENT_VERSION=$(shell head -n 1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
+
+final: ${DIST_CODE}-${ARCH}
+	# reset version string
+	sed -i '1s/(\([^-]*\)-\([^~]*\)~.*)/(\1-\2)/' debian/changelog
+	# ${QUILT_PATCHES}
+	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+
+${DIST_CODE}-amd64:
+#ifeq (${DIST_ID},ubuntu)
+#	# dput ${DIST} ../gajim_${CURRENT_VERSION}_source.changes
+#	ls ../gajim_${CURRENT_VERSION}_source.changes
+#endif
+
+karmic-amd64:
+	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
+
+lucid-amd64:
+	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
+
+${DIST_CODE}-i386:
+# we already uploaded with amd64
+
+ubuntu-prepare:
+# attach dist-id to debian version
+	sed -i '1s/(\(.*\))/(\1~${DIST_CODE})/' debian/changelog
+	quilt import -f debian/local_patches/01_ubuntu-keyring.patch
+	ls debian/patches
+
+debian-prepare:
+# do nothing here
+
+dist-prepare: ${DIST_ID}-prepare final
+
+prepare: cleanup ${DIST_ID}-prepare
+	dh_testdir
+	tar xzf ../gajim_${VERSION}.orig.tar.gz -C ..
+	dh_prep
+	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+
+cleanup: clean
+	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+	dh_testdir
+	dh_clean
+	rm -f debian/stamp-*
+	ls -A | grep --invert-match "^debian" | grep --invert-match "^.svn" | xargs rm -rf
+	sed -i '1s/(\([^~]*\)~.*)/(\1)/' debian/changelog
+	-QUILT_PATCHES=debian/patches quilt delete -r 01_ubuntu-keyring.patch
+	rm -f debian/patches/.dpkg-source-applied
+
+binary-install/gajim::
+	rm $(DEB_DESTDIR)/usr/share/gajim/src/common/GnuPGInterface.py*
+	dh_pysupport -pgajim
+	convert $(DEB_DESTDIR)/usr/share/icons/hicolor/64x64/apps/gajim.png -resize 32x32 $(DEB_DESTDIR)/usr/share/pixmaps/gajim.xpm
