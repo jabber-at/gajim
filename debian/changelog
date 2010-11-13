@@ -1,3 +1,9 @@
+gajim (0.14.1-1) maverick; urgency=low
+  
+  * Version bump from upstream
+
+ -- Mathias Ertl <apt-repository@fsinf.at>  Sat, 06 Nov 2010 17:56:41 +0200
+
 gajim (0.14-4) lucid; urgency=low
   
   * New build to trick PPA.

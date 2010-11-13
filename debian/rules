@@ -20,7 +20,7 @@ DEB_MAKE_INSTALL_TARGET = install PYTHON=python$(PYTHONVER) DESTDIR=$(DEB_DESTDI
 DIST_CODE=$(shell lsb_release -sc | tr "[:upper:]" "[:lower:]")
 DIST_ID=$(shell lsb_release -si | tr "[:upper:]" "[:lower:]")
 ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
-VERSION=0.14
+VERSION=0.14.1
 
 CURRENT_VERSION=$(shell head -n 1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
 
@@ -37,10 +37,10 @@ ${DIST_CODE}-amd64:
 #endif
 
 karmic-amd64:
-	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
+#	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
 
 lucid-amd64:
-	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
+#	dput ppa:gajim/gajim-ppa ../gajim_${CURRENT_VERSION}_source.changes
 
 ${DIST_CODE}-i386:
 # we already uploaded with amd64
