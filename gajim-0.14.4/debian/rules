@@ -5,7 +5,6 @@ DEB_PYTHON_SYSTEM=pysupport
 # # # dh_python / dh_pycentral / dh_pysupport
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/rules/buildvars.mk
-include /usr/share/cdbs/1/rules/simple-patchsys.mk
 include /usr/share/cdbs/1/class/autotools.mk
 include /usr/share/quilt/quilt.make
 QUILT_PATCHES=debian/patches
@@ -48,7 +47,7 @@ ${DIST_CODE}-i386:
 ubuntu-prepare:
 # attach dist-id to debian version
 	sed -i '1s/(\(.*\))/(\1~${DIST_CODE})/' debian/changelog
-	quilt import -f debian/local_patches/01_ubuntu-keyring.patch
+	QUILT_PATCHES=${QUILT_PATCHES} quilt import -f debian/local_patches/01_ubuntu-keyring.patch
 	ls debian/patches
 
 debian-prepare:
