@@ -26,7 +26,7 @@ final: ${DIST_CODE}-${ARCH}
 	# reset version string
 	sed -i '1s/(\([^-]*\)-\([^~]*\)~.*)/(\1-\2)/' debian/changelog
 	# ${QUILT_PATCHES}
-	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+#	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
 
 ${DIST_CODE}-amd64:
 #ifeq (${DIST_ID},ubuntu)
@@ -65,10 +65,10 @@ prepare: cleanup get-orig-source ${DIST_ID}-prepare
 	dh_testdir
 	tar xzf ../${ORIG_SOURCE} -C ..
 	dh_prep
-	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+#	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
 
 cleanup: clean
-	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
+#	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
 	dh_testdir
 	dh_clean
 	rm -f debian/stamp-*
