@@ -65,7 +65,7 @@ get-orig-source: ../${ORIG_SOURCE}
 
 prepare: cleanup get-orig-source ${DIST_ID}-prepare
 	dh_testdir
-	tar xzf ../gajim_${VERSION}.orig.tar.gz -C ..
+	tar xzf ../${ORIG_SOURCE} -C ..
 	dh_prep
 	-QUILT_PATCHES=debian/patches quilt delete -r $(shell basename debian/patches/debian-changes*)
 

@@ -1,10 +1,10 @@
-gajim (0.14.4-1) maverick; urgency=low
+gajim (0.14.4-1) wheezy; urgency=low
   
   * Version bump from upstream
   * use buildvars.mk to get DEB_UPSTREAM_VERSION
   * implement crude get-orig-source target
 
- -- Mathias Ertl <apt-repository@fsinf.at>  __DATE__
+ -- Mathias Ertl <apt-repository@fsinf.at>  Sun, 04 Sep 2011 15:44:09 +0200
 
 gajim (0.14.1-1) maverick; urgency=low
   
