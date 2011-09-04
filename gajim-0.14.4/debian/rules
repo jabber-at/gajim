@@ -4,6 +4,7 @@ DEB_PYTHON_SYSTEM=pysupport
 # Debhelper must be included before python-distutils to use
 # # # dh_python / dh_pycentral / dh_pysupport
 include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/rules/buildvars.mk
 include /usr/share/cdbs/1/rules/simple-patchsys.mk
 include /usr/share/cdbs/1/class/autotools.mk
 include /usr/share/quilt/quilt.make
@@ -20,9 +21,8 @@ DEB_MAKE_INSTALL_TARGET = install PYTHON=python$(PYTHONVER) DESTDIR=$(DEB_DESTDI
 DIST_CODE=$(shell lsb_release -sc | tr "[:upper:]" "[:lower:]")
 DIST_ID=$(shell lsb_release -si | tr "[:upper:]" "[:lower:]")
 ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
-VERSION=0.14.1
+ORIG_SOURCE=gajim_${DEB_UPSTREAM_VERSION}.orig.tar.gz
 
-CURRENT_VERSION=$(shell head -n 1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
 
 final: ${DIST_CODE}-${ARCH}
 	# reset version string
@@ -56,7 +56,14 @@ debian-prepare:
 
 dist-prepare: ${DIST_ID}-prepare final
 
-prepare: cleanup ${DIST_ID}-prepare
+get-orig-source: ../${ORIG_SOURCE}
+../${ORIG_SOURCE}:
+	wget http://gajim.org/downloads/0.14/gajim-${DEB_UPSTREAM_VERSION}.tar.bz2
+	tar xjf gajim-${DEB_UPSTREAM_VERSION}.tar.bz2
+	tar czf ../${ORIG_SOURCE} gajim-${DEB_UPSTREAM_VERSION}
+	rm -rf gajim-${DEB_UPSTREAM_VERSION}.tar.bz2 gajim-${DEB_UPSTREAM_VERSION}
+
+prepare: cleanup get-orig-source ${DIST_ID}-prepare
 	dh_testdir
 	tar xzf ../gajim_${VERSION}.orig.tar.gz -C ..
 	dh_prep
