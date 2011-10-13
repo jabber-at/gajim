@@ -1,4 +1,23 @@
-gajim (0.14.4-1) wheezy; urgency=low
+gajim (0.14.4-4) wheezy; urgency=low
+  
+  * fix and finally add unicode patch
+
+ -- Mathias Ertl <apt-repository@fsinf.at>  __DATE__
+
+gajim (0.14.4-3) wheezy; urgency=low
+  
+  * take patch out of series since it does not seem to work
+
+ -- Mathias Ertl <apt-repository@fsinf.at>  Thu, 13 Oct 2011 00:21:40 +0200
+
+gajim (0.14.4-2~natty) wheezy; urgency=low
+  
+  * add unicode-1.patch which fixes crashes with certain unicode characters
+  * add 02_subscription_message.patch requested by Asterix
+
+ -- Mathias Ertl <apt-repository@fsinf.at>  Wed, 12 Oct 2011 21:44:57 +0200
+
+gajim (0.14.4-1~karmic) karmic; urgency=low
   
   * Version bump from upstream
   * use buildvars.mk to get DEB_UPSTREAM_VERSION
