@@ -1,2 +1,3 @@
-01_ubuntu-keyring.patch
 00_debian-copying.patch
+02_subscription_message.patch
+unicode-1.patch
