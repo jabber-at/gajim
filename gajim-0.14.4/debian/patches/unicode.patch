@@ -14,13 +14,13 @@ Index: gajim-0.14.4/src/common/connection_handlers.py
 Index: gajim-0.14.4/src/common/stanza_session.py
 ===================================================================
 --- gajim-0.14.4.orig/src/common/stanza_session.py	2011-05-31 18:00:32.000000000 +0200
-+++ gajim-0.14.4/src/common/stanza_session.py	2011-10-23 19:53:22.399106377 +0200
++++ gajim-0.14.4/src/common/stanza_session.py	2011-10-23 20:05:40.979105851 +0200
 @@ -375,6 +375,12 @@
          for child in parsed.getChildren():
              stanza.addChild(node=child)
  
 +        # replace non-character unicode
-+	body = stanza.getBody()
++        body = stanza.getBody()
 +        if body:
 +            stanza.setBody(
 +                self.conn.connection.Dispatcher.replace_non_character(body))
