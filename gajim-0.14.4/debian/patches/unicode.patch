@@ -1,7 +1,7 @@
 Index: gajim-0.14.4/src/common/connection_handlers.py
 ===================================================================
 --- gajim-0.14.4.orig/src/common/connection_handlers.py	2011-05-31 18:00:32.000000000 +0200
-+++ gajim-0.14.4/src/common/connection_handlers.py	2011-10-13 13:12:36.369106668 +0200
++++ gajim-0.14.4/src/common/connection_handlers.py	2011-10-23 19:52:10.679106710 +0200
 @@ -1607,6 +1607,8 @@
              if keyID:
                  def decrypt_thread(encmsg, keyID):
@@ -14,13 +14,16 @@ Index: gajim-0.14.4/src/common/connection_handlers.py
 Index: gajim-0.14.4/src/common/stanza_session.py
 ===================================================================
 --- gajim-0.14.4.orig/src/common/stanza_session.py	2011-05-31 18:00:32.000000000 +0200
-+++ gajim-0.14.4/src/common/stanza_session.py	2011-10-13 13:12:36.369106668 +0200
-@@ -375,6 +375,9 @@
++++ gajim-0.14.4/src/common/stanza_session.py	2011-10-23 19:53:22.399106377 +0200
+@@ -375,6 +375,12 @@
          for child in parsed.getChildren():
              stanza.addChild(node=child)
  
 +        # replace non-character unicode
-+        stranza = self.conn.connection.Dispatcher.replace_non_character(stanza)
++	body = stanza.getBody()
++        if body:
++            stanza.setBody(
++                self.conn.connection.Dispatcher.replace_non_character(body))
 +
          return stanza
  
@@ -28,7 +31,7 @@ Index: gajim-0.14.4/src/common/stanza_session.py
 Index: gajim-0.14.4/src/common/xmpp/dispatcher_nb.py
 ===================================================================
 --- gajim-0.14.4.orig/src/common/xmpp/dispatcher_nb.py	2011-05-22 13:12:53.000000000 +0200
-+++ gajim-0.14.4/src/common/xmpp/dispatcher_nb.py	2011-10-13 13:15:45.899107741 +0200
++++ gajim-0.14.4/src/common/xmpp/dispatcher_nb.py	2011-10-23 19:52:10.709106647 +0200
 @@ -20,7 +20,7 @@
  different handlers to different XMPP stanzas and namespaces
  """
