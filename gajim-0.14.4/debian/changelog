@@ -2,7 +2,7 @@ gajim (0.14.4-5) wheezy; urgency=low
   
   * update unicode patch to work with encryption
 
- -- Mathias Ertl <apt-repository@fsinf.at>  __DATE__
+ -- Mathias Ertl <apt-repository@fsinf.at>  Sun, 23 Oct 2011 20:07:58 +0200
 
 gajim (0.14.4-4) wheezy; urgency=low
   
