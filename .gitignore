@@ -1,3 +1,4 @@
 *.orig.tar.gz
 *.swp
 *.swo
+*.build
