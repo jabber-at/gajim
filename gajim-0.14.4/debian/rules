@@ -72,7 +72,7 @@ cleanup: clean
 	dh_testdir
 	dh_clean
 	rm -f debian/stamp-*
-	ls -A | grep --invert-match "^debian" | grep --invert-match "^.svn" | xargs rm -rf
+	ls -A | grep --invert-match "^debian" | xargs rm -rf
 	sed -i '1s/(\([^~]*\)~.*)/(\1)/' debian/changelog
 	-QUILT_PATCHES=debian/patches quilt delete -r 01_ubuntu-keyring.patch
 	rm -f debian/patches/.dpkg-source-applied
