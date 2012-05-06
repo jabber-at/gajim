@@ -1,0 +1,5 @@
+data/gajim.desktop.in
+src/ipython_view.py
+plugins/plugin_installer/config_dialog.ui
+plugins/plugin_installer/__init__.py
+plugins/plugin_installer/plugin_installer.py

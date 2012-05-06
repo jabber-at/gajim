@@ -1,0 +1,183 @@
+[encoding: UTF-8]
+[type: gettext/glade]data/gui/account_context_menu.ui
+[type: gettext/glade]data/gui/account_creation_wizard_window.ui
+[type: gettext/glade]data/gui/accounts_window.ui
+[type: gettext/glade]data/gui/add_new_contact_window.ui
+[type: gettext/glade]data/gui/adhoc_commands_window.ui
+[type: gettext/glade]data/gui/advanced_configuration_window.ui
+[type: gettext/glade]data/gui/advanced_menuitem_menu.ui
+[type: gettext/glade]data/gui/archiving_preferences_window.ui
+[type: gettext/glade]data/gui/atom_entry_window.ui
+[type: gettext/glade]data/gui/blocked_contacts_window.ui
+[type: gettext/glade]data/gui/change_activity_dialog.ui
+[type: gettext/glade]data/gui/change_mood_dialog.ui
+[type: gettext/glade]data/gui/change_password_dialog.ui
+[type: gettext/glade]data/gui/change_status_message_dialog.ui
+[type: gettext/glade]data/gui/chat_context_menu.ui
+[type: gettext/glade]data/gui/chat_control.ui
+[type: gettext/glade]data/gui/chat_to_muc_window.ui
+[type: gettext/glade]data/gui/choose_gpg_key_dialog.ui
+[type: gettext/glade]data/gui/contact_context_menu.ui
+[type: gettext/glade]data/gui/data_form_window.ui
+[type: gettext/glade]data/gui/dubbleinput_dialog.ui
+[type: gettext/glade]data/gui/edit_groups_dialog.ui
+[type: gettext/glade]data/gui/esession_info_window.ui
+[type: gettext/glade]data/gui/features_window.ui
+[type: gettext/glade]data/gui/filetransfers.ui
+[type: gettext/glade]data/gui/gajim_themes_window.ui
+[type: gettext/glade]data/gui/gc_control_popup_menu.ui
+[type: gettext/glade]data/gui/gc_occupants_menu.ui
+[type: gettext/glade]data/gui/groupchat_control.ui
+[type: gettext/glade]data/gui/groups_post_window.ui
+[type: gettext/glade]data/gui/history_manager.ui
+[type: gettext/glade]data/gui/history_window.ui
+[type: gettext/glade]data/gui/input_dialog.ui
+[type: gettext/glade]data/gui/input_text_dialog.ui
+[type: gettext/glade]data/gui/item_archiving_preferences_window.ui
+[type: gettext/glade]data/gui/join_groupchat_window.ui
+[type: gettext/glade]data/gui/manage_bookmarks_window.ui
+[type: gettext/glade]data/gui/manage_pep_services_window.ui
+[type: gettext/glade]data/gui/manage_proxies_window.ui
+[type: gettext/glade]data/gui/manage_sounds_window.ui
+[type: gettext/glade]data/gui/message_window.ui
+[type: gettext/glade]data/gui/passphrase_dialog.ui
+[type: gettext/glade]data/gui/plugins_window.ui
+[type: gettext/glade]data/gui/popup_notification_window.ui
+[type: gettext/glade]data/gui/preferences_window.ui
+[type: gettext/glade]data/gui/privacy_lists_window.ui
+[type: gettext/glade]data/gui/privacy_list_window.ui
+[type: gettext/glade]data/gui/profile_window.ui
+[type: gettext/glade]data/gui/progress_dialog.ui
+[type: gettext/glade]data/gui/remove_account_window.ui
+[type: gettext/glade]data/gui/roster_item_exchange_window.ui
+[type: gettext/glade]data/gui/roster_window.ui
+[type: gettext/glade]data/gui/search_window.ui
+[type: gettext/glade]data/gui/service_discovery_window.ui
+[type: gettext/glade]data/gui/service_registration_window.ui
+[type: gettext/glade]data/gui/single_message_window.ui
+[type: gettext/glade]data/gui/subscription_request_popup_menu.ui
+[type: gettext/glade]data/gui/subscription_request_window.ui
+[type: gettext/glade]data/gui/synchronise_select_account_dialog.ui
+[type: gettext/glade]data/gui/synchronise_select_contacts_dialog.ui
+[type: gettext/glade]data/gui/systray_context_menu.ui
+[type: gettext/glade]data/gui/vcard_information_window.ui
+[type: gettext/glade]data/gui/voip_call_received_dialog.ui
+[type: gettext/glade]data/gui/xml_console_window.ui
+[type: gettext/glade]data/gui/zeroconf_context_menu.ui
+[type: gettext/glade]data/gui/zeroconf_information_window.ui
+data/gajim.desktop.in.in
+src/adhoc_commands.py
+src/advanced_configuration_window.py
+src/atom_window.py
+src/cell_renderer_image.py
+src/chat_control.py
+src/command_system/implementation/custom.py
+src/command_system/implementation/execute.py
+src/command_system/implementation/hosts.py
+src/command_system/implementation/__init__.py
+src/command_system/implementation/middleware.py
+src/command_system/implementation/standard.py
+src/common/account.py
+src/common/atom.py
+src/common/caps_cache.py
+src/common/check_paths.py
+src/common/check_X509.py
+src/common/commands.py
+src/common/configpaths.py
+src/common/config.py
+src/common/connection_handlers_events.py
+src/common/connection_handlers.py
+src/common/connection.py
+src/common/contacts.py
+src/common/crypto.py
+src/common/dataforms.py
+src/common/dbus_support.py
+src/common/defs.py
+src/common/demandimport.py
+src/common/dh.py
+src/common/events.py
+src/common/exceptions.py
+src/common/fuzzyclock.py
+src/common/gajim.py
+src/common/ged.py
+src/common/gnupg.py
+src/common/gpg.py
+src/common/helpers.py
+src/common/i18n.py
+src/common/idle.py
+src/common/__init__.py
+src/common/jingle_content.py
+src/common/jingle.py
+src/common/jingle_rtp.py
+src/common/jingle_session.py
+src/common/jingle_transport.py
+src/common/kwalletbinding.py
+src/common/latex.py
+src/common/location_listener.py
+src/common/logger.py
+src/common/logging_helpers.py
+src/common/message_archiving.py
+src/common/multimedia_helpers.py
+src/common/nec.py
+src/common/optparser.py
+src/common/passwords.py
+src/common/pep.py
+src/common/proxy65_manager.py
+src/common/pubsub.py
+src/common/resolver.py
+src/common/rst_xhtml_generator.py
+src/common/sleepy.py
+src/common/socks5.py
+src/common/stanza_session.py
+src/common/zeroconf/client_zeroconf.py
+src/common/zeroconf/connection_handlers_zeroconf.py
+src/common/zeroconf/connection_zeroconf.py
+src/common/zeroconf/__init__.py
+src/common/zeroconf/roster_zeroconf.py
+src/common/zeroconf/zeroconf_avahi.py
+src/common/zeroconf/zeroconf_bonjour.py
+src/common/zeroconf/zeroconf.py
+src/config.py
+src/conversation_textview.py
+src/dataforms_widget.py
+src/dialogs.py
+src/disco.py
+src/features_window.py
+src/filetransfers_window.py
+src/gajim.py
+src/gajim-remote.py
+src/gajim_themes_window.py
+src/groupchat_control.py
+src/groups.py
+src/gtkexcepthook.py
+src/gtkgui_helpers.py
+src/gtkspell.py
+src/gui_interface.py
+src/gui_menu_builder.py
+src/history_manager.py
+src/history_window.py
+src/htmltextview.py
+src/message_control.py
+src/message_textview.py
+src/message_window.py
+src/music_track_listener.py
+src/negotiation.py
+src/network_manager_listener.py
+src/notify.py
+src/plugins/gui.py
+src/plugins/helpers.py
+src/plugins/__init__.py
+src/plugins/pluginmanager.py
+src/plugins/plugin.py
+src/plugins/plugins_i18n.py
+src/profile_window.py
+src/pycallgraph.py
+src/remote_control.py
+src/roster_window.py
+src/search_window.py
+src/secrets.py
+src/session.py
+src/statusicon.py
+src/tooltips.py
+src/upower_listener.py
+src/vcard.py
