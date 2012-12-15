@@ -142,8 +142,8 @@ class VcardWindow:
             buffer_.set_text(annotations[self.contact.jid])
 
         self.xml.connect_signals(self)
-        self.window.show_all()
         self.xml.get_object('close_button').grab_focus()
+        self.window.show_all()
 
     def update_progressbar(self):
         self.progressbar.pulse()
@@ -173,6 +173,9 @@ class VcardWindow:
         if event.keyval == gtk.keysyms.Escape:
             self.window.destroy()
 
+    def on_information_notebook_switch_page(self, widget, page, page_num):
+        gobject.idle_add(self.xml.get_object('close_button').grab_focus)
+
     def on_PHOTO_eventbox_button_press_event(self, widget, event):
         """
         If right-clicked, show popup
@@ -198,7 +201,11 @@ class VcardWindow:
                 table = self.xml.get_object('personal_info_table')
                 table.attach(widget, 1, 4, 3, 4, yoptions = 0)
             else:
-                self.xml.get_object(entry_name).set_text(value)
+                widget = self.xml.get_object(entry_name)
+                val = widget.get_text()
+                if val:
+                    value = val + ' / ' + value
+                widget.set_text(value)
         except AttributeError:
             pass
 
@@ -268,7 +275,7 @@ class VcardWindow:
             return
         if self.xml.get_object('information_notebook').get_n_pages() < 5:
             return
-        if obj.fjid != self.real_jid:
+        if obj.fjid != self.contact.jid and obj.fjid != self.real_jid:
             return
         i = 0
         client = ''
@@ -299,7 +306,7 @@ class VcardWindow:
             return
         if self.xml.get_object('information_notebook').get_n_pages() < 5:
             return
-        if obj.fjid != self.contact.jid:
+        if obj.fjid != self.contact.jid and obj.fjid != self.real_jid:
             return
         i = 0
         time_s = ''

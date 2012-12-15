@@ -1,3 +1,19 @@
+Gajim 0.15.2 (30 October 2012)
+
+  * Show punycode encoded urls if they contain non-ascii chars
+  * Fix crash when pressing Esc in chat window
+  * Support Network Manager 0.9
+  * decrypt GPG messages in the correct order
+
+Gajim 0.15.1 (29 August 2012)
+
+  * Switch from python-farsight to python-farstream
+  * improve performances
+  * Fix roster filter with unicode chars
+  * Fix connection to msn jabber server
+  * Fix some GPG issues
+  * Fix other small issues
+
 Gajim 0.15 (18 March 2012)
 
   * Plugin system

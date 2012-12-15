@@ -60,7 +60,7 @@ class PluginsWindow(object):
         self.plugin_name_label.set_attributes(attr_list)
 
         self.installed_plugins_model = gtk.ListStore(gobject.TYPE_PYOBJECT,
-            gobject.TYPE_STRING, gobject.TYPE_BOOLEAN)
+            gobject.TYPE_STRING, gobject.TYPE_BOOLEAN, gobject.TYPE_BOOLEAN)
         self.installed_plugins_treeview.set_model(self.installed_plugins_model)
         self.installed_plugins_treeview.set_rules_hint(True)
 
@@ -69,9 +69,8 @@ class PluginsWindow(object):
         self.installed_plugins_treeview.append_column(col)
 
         renderer = gtk.CellRendererToggle()
-        renderer.set_property('activatable', True)
         renderer.connect('toggled', self.installed_plugins_toggled_cb)
-        col = gtk.TreeViewColumn(_('Active'), renderer, active=2)
+        col = gtk.TreeViewColumn(_('Active'), renderer, active=2, activatable=3)
         self.installed_plugins_treeview.append_column(col)
 
         # connect signal for selection change
@@ -83,13 +82,18 @@ class PluginsWindow(object):
         self._clear_installed_plugin_info()
 
         self.fill_installed_plugins_model()
+        selection.select_iter(self.installed_plugins_model.get_iter_root())
 
         self.xml.connect_signals(self)
 
         self.plugins_notebook.set_current_page(0)
+        self.xml.get_object('close_button').grab_focus()
 
         self.window.show_all()
         gtkgui_helpers.possibly_move_window_in_current_desktop(self.window)
+
+    def on_plugins_notebook_switch_page(self, widget, page, page_num):
+        gobject.idle_add(self.xml.get_object('close_button').grab_focus)
 
     @log_calls('PluginsWindow')
     def installed_plugins_treeview_selection_changed(self, treeview_selection):
@@ -115,10 +119,13 @@ class PluginsWindow(object):
 
         desc_textbuffer = self.plugin_description_textview.get_buffer()
         from plugins.plugins_i18n import _
-        desc_textbuffer.set_text(_(plugin.description))
+        txt = plugin.description
+        if plugin.available_text:
+            txt += '\n\n' + _('Warning: %s') % plugin.available_text
+        desc_textbuffer.set_text(txt)
         self.plugin_description_textview.set_property('sensitive', True)
         self.uninstall_plugin_button.set_property('sensitive',
-                                    gajim.PLUGINS_DIRS[1] in plugin.__path__)
+            gajim.PLUGINS_DIRS[1] in plugin.__path__)
         if plugin.config_dialog is None:
             self.configure_plugin_button.set_property('sensitive', False)
         else:
@@ -146,7 +153,7 @@ class PluginsWindow(object):
 
         for plugin in pm.plugins:
             self.installed_plugins_model.append([plugin, plugin.name,
-                plugin.active])
+                plugin.active and plugin.activatable, plugin.activatable])
 
     @log_calls('PluginsWindow')
     def installed_plugins_toggled_cb(self, cell, path):
@@ -159,7 +166,8 @@ class PluginsWindow(object):
             try:
                 gajim.plugin_manager.activate_plugin(plugin)
             except GajimPluginActivateException, e:
-                WarningDialog(_('Plugin failed'), str(e))
+                WarningDialog(_('Plugin failed'), str(e),
+                    transient_for=self.window)
                 return
 
         self.installed_plugins_model[path][2] = not is_active
@@ -230,7 +238,8 @@ class PluginsWindow(object):
                         model.remove(model.get_iter((row, 0)))
                         break
 
-                iter_ = model.append([plugin, plugin.name, False])
+                iter_ = model.append([plugin, plugin.name, False,
+                    plugin.activatable])
                 sel = self.installed_plugins_treeview.get_selection()
                 sel.select_iter(iter_)
 
@@ -252,7 +261,8 @@ class PluginsWindow(object):
                 show_warn_dialog()
                 return
             model = self.installed_plugins_model
-            iter_ = model.append([plugin, plugin.name, False])
+            iter_ = model.append([plugin, plugin.name, False,
+                plugin.activatable])
             sel = self.installed_plugins_treeview.get_selection()
             sel.select_iter(iter_)
 

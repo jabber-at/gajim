@@ -62,8 +62,8 @@ from command_system.implementation.hosts import ChatCommands
 
 # Here we load the module with the standard commands, so they are being detected
 # and dispatched.
-import command_system.implementation.standard
-import command_system.implementation.execute
+from command_system.implementation.standard import StandardChatCommands
+from command_system.implementation.execute import Execute, Show
 
 try:
     import gtkspell
@@ -81,7 +81,15 @@ if dbus_support.supported:
 ##!/bin/sh
 #LANG=$(for i in *.po; do j=${i/.po/}; echo -n "_('"$j"')":" '"$j"', " ; done)
 #echo "{_('en'):'en'",$LANG"}"
-langs = {_('English'): 'en', _('Belarusian'): 'be', _('Bulgarian'): 'bg', _('Breton'): 'br', _('Czech'): 'cs', _('German'): 'de', _('Greek'): 'el', _('British'): 'en_GB', _('Esperanto'): 'eo', _('Spanish'): 'es', _('Basque'): 'eu', _('French'): 'fr', _('Croatian'): 'hr', _('Italian'): 'it', _('Norwegian (b)'): 'nb', _('Dutch'): 'nl', _('Norwegian'): 'no', _('Polish'): 'pl', _('Portuguese'): 'pt', _('Brazilian Portuguese'): 'pt_BR', _('Russian'): 'ru', _('Serbian'): 'sr', _('Slovak'): 'sk', _('Swedish'): 'sv', _('Chinese (Ch)'): 'zh_CN'}
+langs = {_('English'): 'en', _('Belarusian'): 'be', _('Bulgarian'): 'bg',
+        _('Breton'): 'br', _('Czech'): 'cs', _('German'): 'de',
+        _('Greek'): 'el', _('British'): 'en_GB', _('Esperanto'): 'eo',
+        _('Spanish'): 'es', _('Basque'): 'eu', _('French'): 'fr',
+        _('Croatian'): 'hr', _('Italian'): 'it', _('Norwegian (b)'): 'nb',
+        _('Dutch'): 'nl', _('Norwegian'): 'no', _('Polish'): 'pl',
+        _('Portuguese'): 'pt', _('Brazilian Portuguese'): 'pt_BR',
+        _('Russian'): 'ru', _('Serbian'): 'sr', _('Slovak'): 'sk',
+        _('Swedish'): 'sv', _('Chinese (Ch)'): 'zh_CN'}
 
 if gajim.config.get('use_speller') and HAS_GTK_SPELL:
     # loop removing non-existent dictionaries
@@ -980,8 +988,8 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
                 show_in_systray = notify.get_show_in_systray(event,
                     self.account, self.contact, type_)
 
-                event = gajim.events.create_event(type_, (self, msg_id),
-                    show_in_roster=show_in_roster,
+                event = gajim.events.create_event(type_, (text, subject, self,
+                    msg_id), show_in_roster=show_in_roster,
                     show_in_systray=show_in_systray)
                 gajim.events.add_event(self.account, full_jid, event)
                 # We need to redraw contact if we show in roster
@@ -1648,15 +1656,15 @@ class ChatControl(ChatControlBase):
         self.restore_conversation()
         self.msg_textview.grab_focus()
 
-        # change tooltip text for audio and video buttons if python-farsight is
+        # change tooltip text for audio and video buttons if python-farstream is
         # not installed
-        if not gajim.HAVE_FARSIGHT:
+        if not gajim.HAVE_FARSTREAM:
             tooltip_text = self._audio_button.get_tooltip_text()
             self._audio_button.set_tooltip_text(
-                '%s\n%s' % (tooltip_text, _('Requires python-farsight.')))
+                '%s\n%s' % (tooltip_text, _('Requires python-farstream.')))
             tooltip_text = self._video_button.get_tooltip_text()
             self._video_button.set_tooltip_text(
-                '%s\n%s' % (tooltip_text, _('Requires python-farsight.')))
+                '%s\n%s' % (tooltip_text, _('Requires python-farstream.')))
 
         gajim.ged.register_event_handler('pep-received', ged.GUI1,
             self._nec_pep_received)
@@ -1704,7 +1712,7 @@ class ChatControl(ChatControlBase):
 
         # Jingle detection
         if self.contact.supports(NS_JINGLE_ICE_UDP) and \
-        gajim.HAVE_FARSIGHT and self.contact.resource:
+        gajim.HAVE_FARSTREAM and self.contact.resource:
             self.audio_available = self.contact.supports(NS_JINGLE_RTP_AUDIO)
             self.video_available = self.contact.supports(NS_JINGLE_RTP_VIDEO)
         else:
@@ -1735,10 +1743,14 @@ class ChatControl(ChatControlBase):
                     "him or her a file."))
 
         # Convert to GC
-        if self.contact.supports(NS_MUC):
-            self._convert_to_gc_button.set_sensitive(True)
+        if gajim.config.get_per('accounts', self.account, 'is_zeroconf'):
+            self._convert_to_gc_button.set_no_show_all(True)
+            self._convert_to_gc_button.hide()
         else:
-            self._convert_to_gc_button.set_sensitive(False)
+            if self.contact.supports(NS_MUC):
+                self._convert_to_gc_button.set_sensitive(True)
+            else:
+                self._convert_to_gc_button.set_sensitive(False)
 
         # Information
         if gajim.account_is_disconnected(self.account):
@@ -2307,7 +2319,7 @@ class ChatControl(ChatControlBase):
             else:
                 displaymarking = None
             self.print_conversation(message, self.contact.jid, encrypted=encrypted,
-                    xep0184_id=xep0184_id, xhtml=xhtml, displaymarking=displaymarking)
+                xep0184_id=xep0184_id, xhtml=xhtml, displaymarking=displaymarking)
 
         ChatControlBase.send_message(self, message, keyID, type_='chat',
                 chatstate=chatstate_to_send, composing_xep=composing_xep,
@@ -2922,7 +2934,8 @@ class ChatControl(ChatControlBase):
         except exceptions.DatabaseMalformed:
             import common.logger
             dialogs.ErrorDialog(_('Database Error'),
-                    _('The database file (%s) cannot be read. Try to repair it or remove it (all history will be lost).') % common.logger.LOG_DB_PATH)
+                _('The database file (%s) cannot be read. Try to repair it or \
+                remove it (all history will be lost).') % common.logger.LOG_DB_PATH)
             rows = []
         local_old_kind = None
         for row in rows: # row[0] time, row[1] has kind, row[2] the message

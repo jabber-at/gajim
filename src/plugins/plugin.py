@@ -154,6 +154,8 @@ class GajimPlugin(object):
 
         :type: `plugins.plugin.GajimPluginConfig`
         '''
+        self.activatable = True
+        self.available_text = ''
         self.load_config()
         self.config_dialog = GajimPluginConfigDialog(self)
         self.init()
@@ -257,6 +259,8 @@ class GajimPluginConfig():
                     s = shelve.open(self.FILE_PATH)
                     for (k, v) in s.iteritems():
                         self.data[k] = v
+                    if not isinstance(self.data, dict):
+                        raise GajimPluginException
                     s.close()
                     self.save()
                 except:

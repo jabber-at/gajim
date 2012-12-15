@@ -5,8 +5,7 @@ try:
     import OpenSSL.SSL
     import OpenSSL.crypto
     ver = OpenSSL.__version__
-    ver_l = [int(i) for i in ver.split('.')]
-    if ver_l < [0, 12]:
+    if ver < '0.12':
         raise ImportError
     from pyasn1.type import univ, constraint, char, namedtype, tag
     from pyasn1.codec.der.decoder import decode
@@ -134,7 +133,12 @@ try:
         for i in range(0, cnt):
             ext = cert.get_extension(i)
             if ext.get_short_name() == 'subjectAltName':
-                r = _parse_asn1(ext.get_data())
+                try:
+                    r = _parse_asn1(ext.get_data())
+                except:
+                    log.error('Wrong data in certificate: subjectAltName=%s' % \
+                        ext.get_data())
+                    continue
                 if 'otherName' in r:
                     if oid_xmppaddr in r['otherName']:
                         for host in r['otherName'][oid_xmppaddr]:

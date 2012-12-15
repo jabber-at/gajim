@@ -36,7 +36,7 @@ import sys
 import re
 import copy
 import defs
-
+import gobject
 
 (
 OPT_TYPE,
@@ -213,6 +213,18 @@ class Config:
             'roster_avatar_height': [opt_int, 32],
             'tooltip_avatar_width': [opt_int, 125],
             'tooltip_avatar_height': [opt_int, 125],
+            'tooltip_status_online_color': [opt_color, '#73D216'],
+            'tooltip_status_free_for_chat_color': [opt_color, '#3465A4'],
+            'tooltip_status_away_color': [opt_color, '#EDD400'],
+            'tooltip_status_busy_color': [opt_color, '#F57900'],
+            'tooltip_status_na_color': [opt_color, '#CC0000'],
+            'tooltip_status_offline_color': [opt_color, '#555753'],
+            'tooltip_affiliation_none_color': [opt_color, '#555753'],
+            'tooltip_affiliation_member_color': [opt_color, '#73D216'],
+            'tooltip_affiliation_administrator_color': [opt_color, '#F57900'],
+            'tooltip_affiliation_owner_color': [opt_color, '#CC0000'],
+            'tooltip_account_name_color': [opt_color, '#888A85'],
+            'tooltip_idle_color': [opt_color, '#888A85'],
             'vcard_avatar_width': [opt_int, 200],
             'vcard_avatar_height': [opt_int, 200],
             'notification_preview_message': [opt_bool, True, _('Preview new messages in notification popup?')],
@@ -605,6 +617,7 @@ class Config:
             return
 
         opt[OPT_VAL] = value
+        self._timeout_save()
 
     def get(self, optname = None):
         if not optname:
@@ -635,6 +648,7 @@ class Config:
             # we already have added group name before
             return 'you already have added %s before' % name
         opt[1][name] = copy.deepcopy(opt[0])
+        self._timeout_save()
 
     def del_per(self, typename, name, subname = None): # per_group_of_option
         if typename not in self.__options_per_key:
@@ -647,6 +661,7 @@ class Config:
         # if subname is specified, delete the item in the group.
         elif subname in opt[1][name]:
             del opt[1][name][subname]
+        self._timeout_save()
 
     def set_per(self, optname, key, subname, value): # per_group_of_option
         if optname not in self.__options_per_key:
@@ -668,6 +683,7 @@ class Config:
 #                       raise RuntimeError, '%s of %s cannot be None' % optname
             return
         subobj[OPT_VAL] = value
+        self._timeout_save()
 
     def get_per(self, optname, key = None, subname = None): # per_group_of_option
         if optname not in self.__options_per_key:
@@ -735,8 +751,21 @@ class Config:
 
         return (account not in no_log_for) and (jid not in no_log_for)
 
+    def _really_save(self):
+        from common import gajim
+        if gajim.interface:
+            gajim.interface.save_config()
+        self.save_timeout_id = None
+        return False
+
+    def _timeout_save(self):
+        if self.save_timeout_id:
+            return
+        self.save_timeout_id = gobject.timeout_add(1000, self._really_save)
+
     def __init__(self):
         #init default values
+        self.save_timeout_id = None
         for event in self.soundevents_default:
             default = self.soundevents_default[event]
             self.add_per('soundevents', event)

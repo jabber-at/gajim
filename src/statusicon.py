@@ -246,7 +246,7 @@ class StatusIcon:
         item.connect('activate', self.on_show_menuitem_activate, 'offline')
 
         iskey = connected_accounts > 0 and not (connected_accounts == 1 and
-                        gajim.connections[gajim.connections.keys()[0]].is_zeroconf)
+            gajim.zeroconf_is_connected())
         chat_with_menuitem.set_sensitive(iskey)
         single_message_menuitem.set_sensitive(iskey)
         join_gc_menuitem.set_sensitive(iskey)
@@ -367,7 +367,6 @@ class StatusIcon:
 
     def on_sounds_mute_menuitem_activate(self, widget):
         gajim.config.set('sounds_on', not widget.get_active())
-        gajim.interface.save_config()
 
     def on_show_roster_menuitem_activate(self, widget):
         win = gajim.interface.roster.window

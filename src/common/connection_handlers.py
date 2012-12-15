@@ -763,6 +763,9 @@ class ConnectionHandlersBase:
         # keep track of sessions this connection has with other JIDs
         self.sessions = {}
 
+        # We decrypt GPG messages one after the other. Keep queue in mem
+        self.gpg_messages_to_decrypt = []
+
         gajim.ged.register_event_handler('iq-error-received', ged.CORE,
             self._nec_iq_error_received)
         gajim.ged.register_event_handler('presence-received', ged.CORE,
@@ -844,7 +847,7 @@ class ConnectionHandlersBase:
 
             if obj.old_show == obj.new_show and obj.contact.status == \
             obj.status and obj.contact.priority == obj.prio: # no change
-                return
+                return True
         else:
             obj.contact = gajim.contacts.get_first_contact_from_jid(account,
                 jid)
@@ -962,6 +965,14 @@ class ConnectionHandlersBase:
             if sess.enable_encryption:
                 sess.terminate_e2e()
 
+    def decrypt_thread(self, encmsg, keyID, obj):
+        decmsg = self.gpg.decrypt(encmsg, keyID)
+        decmsg = self.connection.Dispatcher.replace_non_character(decmsg)
+        # \x00 chars are not allowed in C (so in GTK)
+        obj.msgtxt = helpers.decode_string(decmsg.replace('\x00', ''))
+        obj.encrypted = 'xep27'
+        self.gpg_messages_to_decrypt.remove([encmsg, keyID, obj])
+
     def _nec_message_received(self, obj):
         if obj.conn.name != self.name:
             return
@@ -979,20 +990,18 @@ class ConnectionHandlersBase:
 
             keyID = gajim.config.get_per('accounts', self.name, 'keyid')
             if keyID:
-                def decrypt_thread(encmsg, keyID, obj):
-                    decmsg = self.gpg.decrypt(encmsg, keyID)
-                    decmsg = self.connection.Dispatcher.replace_non_character(
-                        decmsg)
-                    # \x00 chars are not allowed in C (so in GTK)
-                    obj.msgtxt = helpers.decode_string(decmsg.replace('\x00',
-                        ''))
-                    obj.encrypted = 'xep27'
-                gajim.thread_interface(decrypt_thread, [encmsg, keyID, obj],
-                    self._on_message_decrypted, [obj])
+                self.gpg_messages_to_decrypt.append([encmsg, keyID, obj])
+                if len(self.gpg_messages_to_decrypt) == 1:
+                    gajim.thread_interface(self.decrypt_thread, [encmsg, keyID,
+                        obj], self._on_message_decrypted, [obj])
                 return
         self._on_message_decrypted(None, obj)
 
     def _on_message_decrypted(self, output, obj):
+        if len(self.gpg_messages_to_decrypt):
+            encmsg, keyID, obj2 = self.gpg_messages_to_decrypt[0]
+            gajim.thread_interface(self.decrypt_thread, [encmsg, keyID, obj2],
+                self._on_message_decrypted, [obj2])
         gajim.nec.push_incoming_event(DecryptedMessageReceivedEvent(None,
             conn=self, msg_obj=obj))
 
@@ -1254,6 +1263,7 @@ ConnectionJingle, ConnectionIBBytestream):
             PrivateStorageRosternotesReceivedEvent)
         gajim.nec.register_incoming_event(RosternotesReceivedEvent)
         gajim.nec.register_incoming_event(StreamConflictReceivedEvent)
+        gajim.nec.register_incoming_event(StreamOtherHostReceivedEvent)
         gajim.nec.register_incoming_event(MessageReceivedEvent)
         gajim.nec.register_incoming_event(ArchivingErrorReceivedEvent)
         gajim.nec.register_incoming_event(
@@ -1296,6 +1306,8 @@ ConnectionJingle, ConnectionIBBytestream):
             ged.POSTGUI, self._nec_unsubscribed_presence_received_end)
         gajim.ged.register_event_handler('agent-removed', ged.CORE,
             self._nec_agent_removed)
+        gajim.ged.register_event_handler('stream-other-host-received', ged.CORE,
+            self._nec_stream_other_host_received)
 
     def cleanup(self):
         ConnectionHandlersBase.cleanup(self)
@@ -1338,6 +1350,8 @@ ConnectionJingle, ConnectionIBBytestream):
             ged.POSTGUI, self._nec_unsubscribed_presence_received_end)
         gajim.ged.remove_event_handler('agent-removed', ged.CORE,
             self._nec_agent_removed)
+        gajim.ged.remove_event_handler('stream-other-host-received', ged.CORE,
+            self._nec_stream_other_host_received)
 
     def build_http_auth_answer(self, iq_obj, answer):
         if not self.connection or self.connected < 2:
@@ -1980,10 +1994,15 @@ ConnectionJingle, ConnectionIBBytestream):
         gajim.nec.push_incoming_event(SearchFormReceivedEvent(None,
             conn=self, stanza=iq_obj))
 
+    def _nec_stream_other_host_received(self, obj):
+        if obj.conn.name != self.name:
+            return
+        self.redirected = obj.redirected
+
     def _StreamCB(self, con, iq_obj):
         log.debug('StreamCB')
         gajim.nec.push_incoming_event(StreamReceivedEvent(None,
-            conn=self, stanza=iq_obj))
+            conn=self, stanza=obj))
 
     def _register_handlers(self, con, con_type):
         # try to find another way to register handlers in each class

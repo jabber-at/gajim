@@ -67,6 +67,7 @@ class NonBlockingClient:
         self.on_connect_failure = None
         self.proxy = None
         self.got_features = False
+        self.got_see_other_host = None
         self.stream_started = False
         self.disconnecting = False
         self.protocol_type = 'XMPP'
@@ -84,6 +85,7 @@ class NonBlockingClient:
 
         log.info('Disconnecting NBClient: %s' % message)
 
+        sasl_failed = False
         if 'NonBlockingRoster' in self.__dict__:
             self.NonBlockingRoster.PlugOut()
         if 'NonBlockingBind' in self.__dict__:
@@ -91,7 +93,12 @@ class NonBlockingClient:
         if 'NonBlockingNonSASL' in self.__dict__:
             self.NonBlockingNonSASL.PlugOut()
         if 'SASL' in self.__dict__:
-            self.SASL.PlugOut()
+            if self.SASL.startsasl == 'failure-in-process':
+                sasl_failed = True
+                self.SASL.startsasl = 'failure'
+                self._on_start_sasl()
+            else:
+                self.SASL.PlugOut()
         if 'NonBlockingTCP' in self.__dict__:
             self.NonBlockingTCP.PlugOut()
         if 'NonBlockingHTTP' in self.__dict__:
@@ -110,7 +117,9 @@ class NonBlockingClient:
         self.disconnecting = True
 
         log.debug('Client disconnected..')
-        if connected == '':
+        # Don't call any callback when it's a SASL failure.
+        # SASL handler is already called
+        if connected == '' and not sasl_failed:
             # if we're disconnecting before connection to XMPP sever is opened,
             # we don't call disconnect handlers but on_connect_failure callback
             if self.proxy:
@@ -120,7 +129,7 @@ class NonBlockingClient:
             else:
                 log.debug('calling on_connect_failure cb')
                 self.on_connect_failure()
-        else:
+        elif not sasl_failed:
             # we are connected to XMPP server
             if not stream_started:
                 # if error occur before XML stream was opened, e.g. no response on
@@ -138,8 +147,8 @@ class NonBlockingClient:
         self.disconnecting = False
 
     def connect(self, on_connect, on_connect_failure, hostname=None, port=5222,
-                    on_proxy_failure=None, proxy=None, secure_tuple=('plain', None,
-                            None)):
+    on_proxy_failure=None, on_stream_error_cb=None, proxy=None,
+    secure_tuple=('plain', None, None)):
         """
         Open XMPP connection (open XML streams in both directions)
 
@@ -161,6 +170,7 @@ class NonBlockingClient:
         self.on_connect = on_connect
         self.on_connect_failure=on_connect_failure
         self.on_proxy_failure = on_proxy_failure
+        self.on_stream_error_cb = on_stream_error_cb
         self.desired_security, self.cacerts, self.mycerts = secure_tuple
         self.Connection = None
         self.Port = port
@@ -350,7 +360,11 @@ class NonBlockingClient:
                 # sometimes <features> are received together with document
                 # attributes and sometimes on next receive...
                 self.Dispatcher.ProcessNonBlocking(data)
-            if not self.got_features:
+            if self.got_see_other_host:
+                log.info('got see-other-host')
+                self.onreceive(None)
+                self.on_stream_error_cb(self, self.got_see_other_host)
+            elif not self.got_features:
                 self._xmpp_connect_machine(
                         mode='FAILURE',
                         data='Missing <features> in 1.0 stream')

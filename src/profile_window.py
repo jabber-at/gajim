@@ -42,10 +42,10 @@ class ProfileWindow:
     Class for our information window
     """
 
-    def __init__(self, account):
+    def __init__(self, account, transient_for=None):
         self.xml = gtkgui_helpers.get_gtk_builder('profile_window.ui')
         self.window = self.xml.get_object('profile_window')
-        self.window.set_transient_for(gajim.interface.roster.window)
+        self.window.set_transient_for(transient_for)
         self.progressbar = self.xml.get_object('progressbar')
         self.statusbar = self.xml.get_object('statusbar')
         self.context_id = self.statusbar.get_context_id('profile')
@@ -73,6 +73,10 @@ class ProfileWindow:
         gajim.ged.register_event_handler('vcard-received', ged.GUI1,
             self._nec_vcard_received)
         self.window.show_all()
+        self.xml.get_object('ok_button').grab_focus()
+
+    def on_information_notebook_switch_page(self, widget, page, page_num):
+        gobject.idle_add(self.xml.get_object('ok_button').grab_focus)
 
     def update_progressbar(self):
         self.progressbar.pulse()
@@ -234,7 +238,11 @@ class ProfileWindow:
 
     def set_value(self, entry_name, value):
         try:
-            self.xml.get_object(entry_name).set_text(value)
+            widget = self.xml.get_object(entry_name)
+            val = widget.get_text()
+            if val:
+                value = val + ' / ' + value
+            widget.set_text(value)
         except AttributeError:
             pass
 

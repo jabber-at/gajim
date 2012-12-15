@@ -45,9 +45,10 @@ def device_no_longer_active(self, *args):
 
 def state_changed(state):
     """
-    For Network Manager 0.7
+    For Network Manager 0.7 - 0.9
     """
-    if props.Get("org.freedesktop.NetworkManager", "State") == 3:
+    nm_state = props.Get("org.freedesktop.NetworkManager", "State")
+    if nm_state == 3 or nm_state == 70:
         for connection in gajim.connections.itervalues():
             if gajim.config.get_per('accounts', connection.name,
             'listen_to_network_manager') and connection.time_to_reconnect:
@@ -64,7 +65,6 @@ from common import dbus_support
 
 if dbus_support.supported:
     import dbus
-    import dbus.glib
 
     try:
         from common.dbus_support import system_bus
