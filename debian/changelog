@@ -4,7 +4,7 @@ gajim (0.15.2-1) unstable; urgency=low
   * migrate to python-farstream instead of python-farsight
   * bump required python-gtk2 dependency to 2.22.0
 
- -- Yann Leboulanger <asterix@lagaule.org>  Sat, 18 Mar 2012 10:32:38 +0100
+ -- Yann Leboulanger <asterix@lagaule.org>  Sat, 15 Dec 2012 20:41:19 +0100
 
 gajim (0.15-1) unstable; urgency=low
 
