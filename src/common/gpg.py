@@ -31,6 +31,7 @@ if HAVE_GPG:
     class GnuPG(gnupg.GPG):
         def __init__(self, use_agent=False):
             gnupg.GPG.__init__(self)
+            gnupg.GPG.decode_errors = 'replace'
             self.passphrase = None
             self.use_agent = use_agent
             self.always_trust = False
@@ -72,8 +73,8 @@ if HAVE_GPG:
 
             if result.fingerprint:
                 return self._stripHeaderFooter(str(result))
-#            if 'KEYEXPIRED' in resp:
-#                return 'KEYEXPIRED'
+            if result.status == 'key expired':
+                return 'KEYEXPIRED'
             return 'BAD_PASSPHRASE'
 
         def verify(self, str_, sign):

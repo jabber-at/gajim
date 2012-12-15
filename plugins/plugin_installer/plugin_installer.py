@@ -2,8 +2,8 @@
 #
 ## plugins/plugin_installer/plugin_installer.py
 ##
-## Copyright (C) 2010-2011 Denis Fomin <fominde AT gmail.com>
-## Copyright (C) 2011 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2010-2012 Denis Fomin <fominde AT gmail.com>
+## Copyright (C) 2011-2012 Yann Leboulanger <asterix AT lagaule.org>
 ##
 ## This file is part of Gajim.
 ##
@@ -29,12 +29,25 @@ import ConfigParser
 import os
 import fnmatch
 import sys
+import zipfile
 
 from common import gajim
 from plugins import GajimPlugin
 from plugins.helpers import log_calls, log
 from dialogs import WarningDialog, HigDialog, YesNoDialog
 from plugins.gui import GajimPluginConfigDialog
+
+(
+C_PIXBUF,
+C_DIR,
+C_NAME,
+C_LOCAL_VERSION,
+C_VERSION,
+C_UPGRADE,
+C_DESCRIPTION,
+C_AUTHORS,
+C_HOMEPAGE
+) = range(9)
 
 def convert_version_to_list(version_str):
     version_list = version_str.split('.')
@@ -49,11 +62,18 @@ class PluginInstaller(GajimPlugin):
     def init(self):
         self.description = _('Install and upgrade plugins from ftp')
         self.config_dialog = PluginInstallerPluginConfigDialog(self)
-        self.config_default_values = {'ftp_server': ('ftp.gajim.org', '')}
+        self.config_default_values = {'ftp_server': ('ftp.gajim.org', ''),
+                                      'check_update': (True, ''),
+                                      'TLS': (True, ''),}
         self.window = None
         self.progressbar = None
         self.available_plugins_model = None
         self.upgrading = False # True when opened from upgrade popup dialog
+        self.timeout_id = 0
+        self.connected_ids = {}
+        icon = gtk.Image()
+        self.def_icon = icon.render_icon(gtk.STOCK_PREFERENCES,
+            gtk.ICON_SIZE_MENU)
 
     @log_calls('PluginInstallerPlugin')
     def activate(self):
@@ -62,7 +82,8 @@ class PluginInstaller(GajimPlugin):
         self.id_ = self.pl_menuitem.connect_after('activate', self.on_activate)
         if 'plugins' in gajim.interface.instances:
             self.on_activate(None)
-        gobject.timeout_add_seconds(30, self.check_update)
+        if self.config['check_update']:
+            self.timeout_id = gobject.timeout_add_seconds(30, self.check_update)
 
     @log_calls('PluginInstallerPlugin')
     def warn_update(self, plugins):
@@ -78,7 +99,7 @@ class PluginInstaller(GajimPlugin):
                 '\n%s') % plugins_str, on_response_yes=open_update)
 
     def ftp_connect(self):
-        if sys.version_info[:2] > (2, 6):
+        if sys.version_info[:2] > (2, 6) and self.config['TLS'] :
             con = ftplib.FTP_TLS(self.config['ftp_server'])
             con.login()
             con.prot_p()
@@ -93,23 +114,28 @@ class PluginInstaller(GajimPlugin):
             try:
                 to_update = []
                 con = self.ftp_connect()
-                plugins_dirs = con.nlst()
-                for dir_ in plugins_dirs:
-                    try:
-                        con.retrbinary('RETR %s/manifest.ini' % dir_,
-                            ftp.handleDownload)
-                    except Exception, error:
-                        if str(error).startswith('550'):
-                            continue
-                    ftp.config.readfp(io.BytesIO(ftp.buffer_.getvalue()))
-                    local_version = ftp.get_plugin_version(ftp.config.get(
+                con.cwd('plugins')
+                con.retrbinary('RETR manifests.zip', ftp.handleDownload)
+                zip_file = zipfile.ZipFile(ftp.buffer_)
+                manifest_list = zip_file.namelist()
+                for filename in manifest_list:
+                    config = ConfigParser.ConfigParser()
+                    config.readfp(zip_file.open(filename))
+                    if not config.has_section('info'):
+                        continue
+                    opts = config.options('info')
+                    if 'name' not in opts or 'version' not in opts or \
+                    'description' not in opts or 'authors' not in opts or \
+                    'homepage' not in opts:
+                        continue
+                    local_version = ftp.get_plugin_version(config.get(
                         'info', 'name'))
                     if local_version:
                         local = convert_version_to_list(local_version)
-                        remote = convert_version_to_list(ftp.config.get('info',
+                        remote = convert_version_to_list(config.get('info',
                             'version'))
                         if remote > local:
-                            to_update.append(ftp.config.get('info', 'name'))
+                            to_update.append(config.get('info', 'name'))
                 con.quit()
                 gobject.idle_add(self.warn_update, to_update)
             except Exception, e:
@@ -117,6 +143,7 @@ class PluginInstaller(GajimPlugin):
         ftp = Ftp(self)
         ftp.run = _run
         ftp.start()
+        self.timeout_id = 0
 
     @log_calls('PluginInstallerPlugin')
     def deactivate(self):
@@ -124,19 +151,29 @@ class PluginInstaller(GajimPlugin):
         if hasattr(self, 'page_num'):
             self.notebook.remove_page(self.page_num)
             self.notebook.set_current_page(0)
+            for id_, widget in self.connected_ids.items():
+                widget.disconnect(id_)
+            del self.page_num
         if hasattr(self, 'ftp'):
             del self.ftp
+        if self.timeout_id > 0:
+            gobject.source_remove(self.timeout_id)
+            self.timeout_id = 0
 
     def on_activate(self, widget):
         if 'plugins' not in gajim.interface.instances:
             return
+        if hasattr(self, 'page_num'):
+            # 'Available' tab exists
+            return
         self.installed_plugins_model = gajim.interface.instances[
             'plugins'].installed_plugins_model
         self.notebook = gajim.interface.instances['plugins'].plugins_notebook
-        self.id_n = self.notebook.connect('switch-page',
-            self.on_notebook_switch_page)
+        id_ = self.notebook.connect('switch-page', self.on_notebook_switch_page)
+        self.connected_ids[id_] = self.notebook
         self.window = gajim.interface.instances['plugins'].window
-        self.window.connect('destroy', self.on_win_destroy)
+        id_ = self.window.connect('destroy', self.on_win_destroy)
+        self.connected_ids[id_] = self.window
         self.GTK_BUILDER_FILE_PATH = self.local_file_path('config_dialog.ui')
         self.xml = gtk.Builder()
         self.xml.set_translation_domain('gajim_plugins')
@@ -157,30 +194,39 @@ class PluginInstaller(GajimPlugin):
         attr_list.insert(pango.AttrWeight(pango.WEIGHT_BOLD, 0, -1))
         self.plugin_name_label1.set_attributes(attr_list)
 
-        self.available_plugins_model = gtk.ListStore(gobject.TYPE_PYOBJECT,
-            gobject.TYPE_STRING, gobject.TYPE_STRING, gobject.TYPE_STRING,
-            gobject.TYPE_BOOLEAN, gobject.TYPE_PYOBJECT, gobject.TYPE_PYOBJECT,
-            gobject.TYPE_PYOBJECT)
+        self.available_plugins_model = gtk.ListStore(gtk.gdk.Pixbuf,
+            gobject.TYPE_PYOBJECT, gobject.TYPE_STRING, gobject.TYPE_STRING,
+            gobject.TYPE_STRING, gobject.TYPE_BOOLEAN, gobject.TYPE_PYOBJECT,
+            gobject.TYPE_PYOBJECT, gobject.TYPE_PYOBJECT)
         self.available_treeview.set_model(self.available_plugins_model)
         self.available_treeview.set_rules_hint(True)
+        self.available_plugins_model.set_sort_column_id(2, gtk.SORT_ASCENDING)
 
         self.progressbar.set_property('no-show-all', True)
         renderer = gtk.CellRendererText()
-        col = gtk.TreeViewColumn(_('Plugin'), renderer, text=1)
+        col = gtk.TreeViewColumn(_('Plugin'))
+        cell = gtk.CellRendererPixbuf()
+        col.pack_start(cell, False)
+        col.add_attribute(cell, 'pixbuf', C_PIXBUF)
+        col.pack_start(renderer, True)
+        col.add_attribute(renderer, 'text', C_NAME)
         col.set_resizable(True)
         col.set_property('expand', True)
         col.set_sizing(gtk.TREE_VIEW_COLUMN_GROW_ONLY)
         self.available_treeview.append_column(col)
-        col = gtk.TreeViewColumn(_('Installed\nversion'), renderer, text=2)
+        col = gtk.TreeViewColumn(_('Installed\nversion'), renderer,
+            text=C_LOCAL_VERSION)
         self.available_treeview.append_column(col)
-        col = gtk.TreeViewColumn(_('Available\nversion'), renderer, text=3)
+        col = gtk.TreeViewColumn(_('Available\nversion'), renderer,
+            text=C_VERSION)
         col.set_property('expand', False)
         self.available_treeview.append_column(col)
 
         renderer = gtk.CellRendererToggle()
         renderer.set_property('activatable', True)
         renderer.connect('toggled', self.available_plugins_toggled_cb)
-        col = gtk.TreeViewColumn(_('Install /\nUpgrade'), renderer, active=4)
+        col = gtk.TreeViewColumn(_('Install /\nUpgrade'), renderer,
+            active=C_UPGRADE)
         self.available_treeview.append_column(col)
 
         if gobject.signal_lookup('error_signal', self.window) is 0:
@@ -190,8 +236,11 @@ class PluginInstaller(GajimPlugin):
             gobject.signal_new('plugin_downloaded', self.window,
                 gobject.SIGNAL_RUN_LAST, gobject.TYPE_STRING,
                 (gobject.TYPE_PYOBJECT,))
-        self.window.connect('error_signal', self.on_some_ftp_error)
-        self.window.connect('plugin_downloaded', self.on_plugin_downloaded)
+        id_ = self.window.connect('error_signal', self.on_some_ftp_error)
+        self.connected_ids[id_] = self.window
+        id_ = self.window.connect('plugin_downloaded',
+            self.on_plugin_downloaded)
+        self.connected_ids[id_] = self.window
 
         selection = self.available_treeview.get_selection()
         selection.connect('changed',
@@ -205,14 +254,16 @@ class PluginInstaller(GajimPlugin):
     def on_win_destroy(self, widget):
         if hasattr(self, 'ftp'):
             del self.ftp
+        if hasattr(self, 'page_num'):
+            del self.page_num
 
     def available_plugins_toggled_cb(self, cell, path):
-        is_active = self.available_plugins_model[path][4]
-        self.available_plugins_model[path][4] = not is_active
+        is_active = self.available_plugins_model[path][C_UPGRADE]
+        self.available_plugins_model[path][C_UPGRADE] = not is_active
         dir_list = []
         for i in xrange(len(self.available_plugins_model)):
-            if self.available_plugins_model[i][4]:
-                dir_list.append(self.available_plugins_model[i][0])
+            if self.available_plugins_model[i][C_UPGRADE]:
+                dir_list.append(self.available_plugins_model[i][C_DIR])
         if not dir_list:
             self.inslall_upgrade_button.set_property('sensitive', False)
         else:
@@ -231,8 +282,8 @@ class PluginInstaller(GajimPlugin):
         self.inslall_upgrade_button.set_property('sensitive', False)
         dir_list = []
         for i in xrange(len(self.available_plugins_model)):
-            if self.available_plugins_model[i][4]:
-                dir_list.append(self.available_plugins_model[i][0])
+            if self.available_plugins_model[i][C_UPGRADE]:
+                dir_list.append(self.available_plugins_model[i][C_DIR])
 
         ftp = Ftp(self)
         ftp.remote_dirs = dir_list
@@ -240,18 +291,23 @@ class PluginInstaller(GajimPlugin):
 
     def on_some_ftp_error(self, widget, error_text):
         for i in xrange(len(self.available_plugins_model)):
-            self.available_plugins_model[i][4] = False
+            self.available_plugins_model[i][C_UPGRADE] = False
         self.progressbar.hide()
         WarningDialog(_('Ftp error'), error_text, self.window)
 
     def on_plugin_downloaded(self, widget, plugin_dirs):
+        dialog = HigDialog(None, gtk.MESSAGE_INFO, gtk.BUTTONS_OK,
+            '', _('All selected plugins downloaded'))
+        dialog.set_modal(False)
+        dialog.set_transient_for(self.window)
+
         for _dir in plugin_dirs:
             is_active = False
             plugins = None
             plugin_dir = os.path.join(gajim.PLUGINS_DIRS[1], _dir)
             plugin = gajim.plugin_manager.get_plugin_by_path(plugin_dir)
             if plugin:
-                if plugin.active and plugin.name != self.name:
+                if plugin.active:
                     is_active = True
                     gobject.idle_add(gajim.plugin_manager.deactivate_plugin,
                         plugin)
@@ -269,33 +325,43 @@ class PluginInstaller(GajimPlugin):
             gajim.plugin_manager.add_plugin(plugins[0])
             plugin = gajim.plugin_manager.plugins[-1]
             for row in xrange(len(self.available_plugins_model)):
-                if plugin.name == self.available_plugins_model[row][1]:
-                    self.available_plugins_model[row][2] = plugin.version
-                    self.available_plugins_model[row][4] = False
-                    continue
-            if is_active and plugin.name != self.name:
+                if plugin.name == self.available_plugins_model[row][C_NAME]:
+                    self.available_plugins_model[row][C_LOCAL_VERSION] = \
+                        plugin.version
+                    self.available_plugins_model[row][C_UPGRADE] = False
+            if is_active:
                 gobject.idle_add(gajim.plugin_manager.activate_plugin, plugin)
-            if plugin.name != 'Plugin Installer':
-                self.installed_plugins_model.append([plugin, plugin.name,
-                    is_active])
-        dialog = HigDialog(None, gtk.MESSAGE_INFO, gtk.BUTTONS_OK,
-            '', _('All selected plugins downloaded'))
-        dialog.set_modal(False)
-        dialog.set_transient_for(self.window)
+            # get plugin icon
+            icon_file = os.path.join(plugin.__path__, os.path.split(
+                plugin.__path__)[1]) + '.png'
+            icon = self.def_icon
+            if os.path.isfile(icon_file):
+                icon = gtk.gdk.pixbuf_new_from_file_at_size(icon_file, 16, 16)
+            if not hasattr(plugin, 'activatable'):
+                # version 0.15
+                plugin.activatable = False
+            max_row = [plugin, plugin.name, is_active, plugin.activatable, icon]
+            # support old plugin system
+            row_len = len(self.installed_plugins_model[0])
+            row = max_row[0: row_len]
+            self.installed_plugins_model.append(row)
+
         dialog.popup()
 
     def available_plugins_treeview_selection_changed(self, treeview_selection):
         model, iter = treeview_selection.get_selected()
         if iter:
-            self.plugin_name_label1.set_text(model.get_value(iter, 1))
-            self.plugin_authors_label1.set_text(model.get_value(iter, 6))
-            self.plugin_homepage_linkbutton1.set_uri(model.get_value(iter, 7))
-            self.plugin_homepage_linkbutton1.set_label(model.get_value(iter, 7))
+            self.plugin_name_label1.set_text(model.get_value(iter, C_NAME))
+            self.plugin_authors_label1.set_text(model.get_value(iter, C_AUTHORS))
+            self.plugin_homepage_linkbutton1.set_uri(model.get_value(iter,
+                C_HOMEPAGE))
+            self.plugin_homepage_linkbutton1.set_label(model.get_value(iter,
+                C_HOMEPAGE))
             label = self.plugin_homepage_linkbutton1.get_children()[0]
             label.set_ellipsize(pango.ELLIPSIZE_END)
             self.plugin_homepage_linkbutton1.set_property('sensitive', True)
             desc_textbuffer = self.plugin_description_textview1.get_buffer()
-            desc_textbuffer.set_text(_(model.get_value(iter, 5)))
+            desc_textbuffer.set_text(_(model.get_value(iter, C_DESCRIPTION)))
             self.plugin_description_textview1.set_property('sensitive', True)
         else:
             self._clear_available_plugin_info()
@@ -336,7 +402,11 @@ class PluginInstaller(GajimPlugin):
                 if module_name == '__init__':
                     continue
                 try:
-                    module = __import__('%s.%s' % (mod, module_name))
+                    full_module_name = '%s.%s' % (mod, module_name)
+                    if full_module_name in sys.modules:
+                        module = reload(sys.modules[full_module_name])
+                    else:
+                        module = __import__(full_module_name)
                 except ValueError, value_error:
                     pass
                 except ImportError, import_error:
@@ -372,6 +442,15 @@ class PluginInstaller(GajimPlugin):
                     pass
         return plugins_found
 
+    def select_root_iter(self):
+        if hasattr(self, 'page_num'):
+            selection = self.available_treeview.get_selection()
+            if selection.count_selected_rows() == 0:
+                root_iter = self.available_plugins_model.get_iter_root()
+                selection.select_iter(root_iter)
+        scr_win = self.xml.get_object('scrolledwindow2')
+        scr_win.get_vadjustment().set_value(0)
+
 
 class Ftp(threading.Thread):
     def __init__(self, plugin):
@@ -380,11 +459,13 @@ class Ftp(threading.Thread):
         self.window = plugin.window
         self.progressbar = plugin.progressbar
         self.model = plugin.available_plugins_model
-        self.config = ConfigParser.ConfigParser()
         self.buffer_ = io.BytesIO()
         self.remote_dirs = None
         self.append_to_model = True
         self.upgrading = False
+        icon = gtk.Image()
+        self.def_icon = icon.render_icon(gtk.STOCK_PREFERENCES,
+            gtk.ICON_SIZE_MENU)
 
     def model_append(self, row):
         self.model.append(row)
@@ -406,46 +487,69 @@ class Ftp(threading.Thread):
             self.ftp = self.plugin.ftp_connect()
             self.ftp.cwd('plugins')
             if not self.remote_dirs:
-                self.plugins_dirs = self.ftp.nlst()
-                progress_step = 1.0 / len(self.plugins_dirs)
                 gobject.idle_add(self.progressbar.set_text,
                     _('Scan files on the server'))
-                for dir_ in self.plugins_dirs:
+                self.ftp.retrbinary('RETR manifests_images.zip', self.handleDownload)
+                zip_file = zipfile.ZipFile(self.buffer_)
+                manifest_list = zip_file.namelist()
+                progress_step = 1.0 / len(manifest_list)
+                for filename in manifest_list:
+                    if not filename.endswith('manifest.ini'):
+                        continue
+                    dir_ = filename.split('/')[0]
                     fract = self.progressbar.get_fraction() + progress_step
                     gobject.idle_add(self.progressbar.set_fraction, fract)
                     gobject.idle_add(self.progressbar.set_text,
-                        _('Read "%s"') % dir_)
-                    try:
-                        self.ftp.retrbinary('RETR %s/manifest.ini' % dir_,
-                            self.handleDownload)
-                    except Exception, error:
-                        if str(error).startswith('550'):
-                            continue
-                    self.config.readfp(io.BytesIO(self.buffer_.getvalue()))
+                        _('Reading "%s"') % dir_)
+
+                    config = ConfigParser.ConfigParser()
+                    config.readfp(zip_file.open(filename))
+                    if not config.has_section('info'):
+                        continue
+                    opts = config.options('info')
+                    if 'name' not in opts or 'version' not in opts or \
+                    'description' not in opts or 'authors' not in opts or \
+                    'homepage' not in opts:
+                        continue
+
                     local_version = self.get_plugin_version(
-                        self.config.get('info', 'name'))
+                        config.get('info', 'name'))
                     upgrade = False
                     if self.upgrading and local_version:
                         local = convert_version_to_list(local_version)
-                        remote = convert_version_to_list(self.config.get('info',
+                        remote = convert_version_to_list(config.get('info',
                             'version'))
                         if remote > local:
                             upgrade = True
                             gobject.idle_add(
                                 self.plugin.inslall_upgrade_button.set_property,
                                 'sensitive', True)
-                    gobject.idle_add(self.model_append, [dir_,
-                        self.config.get('info', 'name'), local_version,
-                        self.config.get('info', 'version'), upgrade,
-                        self.config.get('info', 'description'),
-                        self.config.get('info', 'authors'),
-                        self.config.get('info', 'homepage'), ])
-                self.plugins_dirs = None
+                    png_filename = dir_ + '/' + dir_ + '.png'
+                    if png_filename in manifest_list:
+                        data = zip_file.open(png_filename).read()
+                        pbl = gtk.gdk.PixbufLoader()
+                        pbl.set_size(16, 16)
+                        pbl.write(data)
+                        pbl.close()
+                        def_icon = pbl.get_pixbuf()
+                    else:
+                        def_icon = self.def_icon
+                    if local_version:
+                        base_dir, user_dir = gajim.PLUGINS_DIRS
+                        local_dir = os.path.join(user_dir, dir_)
+
+                    gobject.idle_add(self.model_append, [def_icon, dir_,
+                        config.get('info', 'name'), local_version,
+                        config.get('info', 'version'), upgrade,
+                        config.get('info', 'description'),
+                        config.get('info', 'authors'),
+                        config.get('info', 'homepage'), ])
                 self.ftp.quit()
             gobject.idle_add(self.progressbar.set_fraction, 0)
             if self.remote_dirs:
                 self.download_plugin()
             gobject.idle_add(self.progressbar.hide)
+            gobject.idle_add(self.plugin.select_root_iter)
         except Exception, e:
             self.window.emit('error_signal', str(e))
 
@@ -455,7 +559,7 @@ class Ftp(threading.Thread):
     def download_plugin(self):
         gobject.idle_add(self.progressbar.show)
         self.pulse = gobject.timeout_add(150, self.progressbar_pulse)
-        gobject.idle_add(self.progressbar.set_text, _('Create a list of files'))
+        gobject.idle_add(self.progressbar.set_text, _('Creating a list of files'))
         for remote_dir in self.remote_dirs:
 
             def nlstr(dir_, subdir=None):
@@ -480,12 +584,13 @@ class Ftp(threading.Thread):
             dirs, files = [], []
             nlstr('/plugins/' + remote_dir)
 
-            if not os.path.isdir(gajim.PLUGINS_DIRS[1]):
-                os.mkdir(gajim.PLUGINS_DIRS[1])
-            local_dir = ld = os.path.join(gajim.PLUGINS_DIRS[1], remote_dir)
+            base_dir, user_dir = gajim.PLUGINS_DIRS
+            if not os.path.isdir(user_dir):
+                os.mkdir(user_dir)
+            local_dir = ld = os.path.join(user_dir, remote_dir)
             if not os.path.isdir(local_dir):
                 os.mkdir(local_dir)
-            local_dir = os.path.split(gajim.PLUGINS_DIRS[1])[0]
+            local_dir = os.path.split(user_dir)[0]
 
             # creating dirs
             for dir_ in dirs:
@@ -530,7 +635,16 @@ class PluginInstallerPluginConfigDialog(GajimPluginConfigDialog):
     def on_run(self):
         widget = self.xml.get_object('ftp_server')
         widget.set_text(str(self.plugin.config['ftp_server']))
+        self.xml.get_object('check_update').set_active(
+            self.plugin.config['check_update'])
+        self.xml.get_object('TLS').set_active(self.plugin.config['TLS'])
 
     def on_hide(self, widget):
         widget = self.xml.get_object('ftp_server')
         self.plugin.config['ftp_server'] = widget.get_text()
+
+    def on_check_update_toggled(self, widget):
+        self.plugin.config['check_update'] = widget.get_active()
+
+    def on_tls_toggled(self, widget):
+        self.plugin.config['TLS'] = widget.get_active()

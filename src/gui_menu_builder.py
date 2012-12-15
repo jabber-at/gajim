@@ -125,6 +125,8 @@ def build_invite_submenu(invite_menuitem, list_, ignore_rooms=[]):
     for gc_control in gajim.interface.msg_win_mgr.get_controls(
     message_control.TYPE_GC) + minimized_controls:
         acct = gc_control.account
+        if acct not in connected_accounts:
+            continue
         room_jid = gc_control.room_jid
         if room_jid in ignore_rooms:
             continue
@@ -153,7 +155,7 @@ def build_invite_submenu(invite_menuitem, list_, ignore_rooms=[]):
 
 def get_contact_menu(contact, account, use_multiple_contacts=True,
 show_start_chat=True, show_encryption=False, show_buttonbar_items=True,
-control=None, gc_contact=None):
+control=None, gc_contact=None, is_anonymous=True):
     """
     Build contact popup menu for roster and chat window. If control is not set,
     we hide invite_contacts_menuitem
@@ -236,8 +238,14 @@ control=None, gc_contact=None):
 
         if contact.supports(NS_COMMANDS):
             execute_command_menuitem.set_sensitive(True)
-            execute_command_menuitem.connect('activate', roster.on_execute_command,
-                    contact, account, contact.resource)
+            if gc_contact and gc_contact.jid and not is_anonymous:
+                execute_command_menuitem.connect('activate',
+                    roster.on_execute_command, gc_contact, account,
+                    gc_contact.resource)
+            else:
+                execute_command_menuitem.connect('activate',
+                    roster.on_execute_command, contact, account,
+                    contact.resource)
         else:
             execute_command_menuitem.set_sensitive(False)
 
@@ -379,6 +387,9 @@ control=None, gc_contact=None):
             build_invite_submenu(invite_menuitem, [(gc_contact, account)])
     else:
         build_invite_submenu(invite_menuitem, [(contact, account)])
+
+    if gajim.account_is_disconnected(account):
+        invite_menuitem.set_sensitive(False)
 
     # One or several resource, we do the same for send_custom_status
     status_menuitems = gtk.Menu()

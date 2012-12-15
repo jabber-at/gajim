@@ -828,7 +828,6 @@ _('This type of service does not contain any items to browse.'))
             self.address_comboboxentry.append_text(j)
         gajim.config.set('latest_disco_addresses',
                 ' '.join(self.latest_addresses))
-        gajim.interface.save_config()
         self.travel(jid, '')
 
     def on_services_treeview_row_activated(self, widget, path, col = 0):
@@ -2099,8 +2098,11 @@ class DiscussionGroupsBrowser(AgentBrowser):
         name = gobject.markup_escape_text(name)
         name = '<b>%s</b>' % name
 
-        parent_iter = self._get_iter(parent_node)
-        if not self._in_list(node):
+        if parent_node:
+            parent_iter = self._get_iter(parent_node)
+        else:
+            parent_iter = None
+        if not node or not self._in_list(node):
             self.model.append(parent_iter, (jid, node, name, dunno, subscribed))
             self.cache.get_items(jid, node, self._add_items, force = force,
                     args = (force,))

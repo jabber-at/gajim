@@ -694,6 +694,7 @@ class Connection(CommonConnection, ConnectionHandlers):
         self.try_connecting_for_foo_secs = 45
         # holds the actual hostname to which we are connected
         self.connected_hostname = None
+        self.redirected = None
         self.last_time_to_reconnect = None
         self.new_account_info = None
         self.new_account_form = None
@@ -854,7 +855,12 @@ class Connection(CommonConnection, ConnectionHandlers):
                 # show error dialog
                 self._connection_lost()
         else:
-            self.disconnect()
+            if self.redirected:
+                self.disconnect(on_purpose=True)
+                self.connect()
+                return
+            else:
+                self.disconnect()
         self.on_purpose = False
     # END disconnectedReconnCB
 
@@ -1044,10 +1050,17 @@ class Connection(CommonConnection, ConnectionHandlers):
                     self.name, 'try_connecting_for_foo_secs')
             proxy = helpers.get_proxy_info(self.name)
             use_srv = gajim.config.get_per('accounts', self.name, 'use_srv')
-            use_custom = gajim.config.get_per('accounts', self.name,
+            if self.redirected:
+                use_custom = True
+                custom_h = self.redirected['host']
+                custom_p = self.redirected['port']
+            else:
+                use_custom = gajim.config.get_per('accounts', self.name,
                     'use_custom_host')
-            custom_h = gajim.config.get_per('accounts', self.name, 'custom_host')
-            custom_p = gajim.config.get_per('accounts', self.name, 'custom_port')
+                custom_h = gajim.config.get_per('accounts', self.name,
+                    'custom_host')
+                custom_p = gajim.config.get_per('accounts', self.name,
+                    'custom_port')
 
         # create connection if it doesn't already exist
         self.connected = 1
@@ -1059,8 +1072,10 @@ class Connection(CommonConnection, ConnectionHandlers):
             h = custom_h
             p = custom_p
             ssl_p = custom_p
-            use_srv = False
+            if not self.redirected:
+                use_srv = False
 
+        self.redirected = None
         # SRV resolver
         self._proxy = proxy
         self._hosts = [ {'host': h, 'port': p, 'ssl_port': ssl_p, 'prio': 10,
@@ -1129,6 +1144,10 @@ class Connection(CommonConnection, ConnectionHandlers):
                 self._disconnectedReconnCB()
 
     def connect_to_next_type(self, retry=False):
+        if self.redirected:
+            self.disconnect(on_purpose=True)
+            self.connect()
+            return
         if len(self._connection_types):
             self._current_type = self._connection_types.pop(0)
             if self.last_connection:
@@ -1189,6 +1208,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             on_connect=self.on_connect_success,
             on_proxy_failure=self.on_proxy_failure,
             on_connect_failure=self.connect_to_next_type,
+            on_stream_error_cb=self._StreamCB,
             proxy=self._proxy,
             secure_tuple = secure_tuple)
 
@@ -1774,9 +1794,12 @@ class Connection(CommonConnection, ConnectionHandlers):
 
     def _change_from_invisible(self):
         if self.privacy_rules_supported:
-            iq = self.build_privacy_rule('visible', 'allow')
-            self.connection.send(iq)
-            self.activate_privacy_rule('visible')
+            if self.blocked_list:
+                self.activate_privacy_rule('block')
+            else:
+                iq = self.build_privacy_rule('visible', 'allow')
+                self.connection.send(iq)
+                self.activate_privacy_rule('visible')
 
     def _update_status(self, show, msg):
         xmpp_show = helpers.get_xmpp_show(show)

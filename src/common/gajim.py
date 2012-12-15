@@ -90,14 +90,19 @@ gmail_domains = ['gmail.com', 'googlemail.com']
 transport_type = {} # list the type of transport
 
 last_message_time = {} # list of time of the latest incomming message
-                                                        # {acct1: {jid1: time1, jid2: time2}, }
-encrypted_chats = {} # list of encrypted chats {acct1: [jid1, jid2], ..}
+                       # {acct1: {jid1: time1, jid2: time2}, }
+encrypted_chats = {}   # list of encrypted chats {acct1: [jid1, jid2], ..}
 
 contacts = LegacyContactsAPI()
-gc_connected = {} # tell if we are connected to the room or not {acct: {room_jid: True}}
-gc_passwords = {} # list of the pass required to enter a room {room_jid: password}
-automatic_rooms = {} # list of rooms that must be automaticaly configured and for which we have a list of invities {account: {room_jid: {'invities': []}}}
-new_room_nick = None # if it's != None, use this nick instead of asking for a new nickname when there is a conflict.
+gc_connected = {}    # tell if we are connected to the room or not
+                     # {acct: {room_jid: True}}
+gc_passwords = {}    # list of the pass required to enter a room
+                     # {room_jid: password}
+automatic_rooms = {} # list of rooms that must be automaticaly configured
+                     # and for which we have a list of invities
+                     #{account: {room_jid: {'invities': []}}}
+new_room_nick = None # if it's != None, use this nick instead of asking for
+                     # a new nickname when there is a conflict.
 
 groups = {} # list of groups
 newly_added = {} # list of contacts that has just signed in
@@ -169,21 +174,21 @@ else:
 # read.
 HAVE_LATEX = False
 
-HAVE_FARSIGHT = True
+HAVE_FARSTREAM = True
 try:
-    farsight = __import__('farsight')
+    farstream = __import__('farstream')
     import gst
     import glib
     try:
         conference = gst.element_factory_make('fsrtpconference')
-        session = conference.new_session(farsight.MEDIA_TYPE_AUDIO)
+        session = conference.new_session(farstream.MEDIA_TYPE_AUDIO)
         del session
         del conference
     except glib.GError:
-        HAVE_FARSIGHT = False
+        HAVE_FARSTREAM = False
 
 except ImportError:
-    HAVE_FARSIGHT = False
+    HAVE_FARSTREAM = False
 
 HAVE_UPNP_IGD = True
 try:
@@ -204,9 +209,10 @@ gajim_common_features = [xmpp.NS_BYTESTREAM, xmpp.NS_SI, xmpp.NS_FILE,
         xmpp.NS_MUC, xmpp.NS_MUC_USER, xmpp.NS_MUC_ADMIN, xmpp.NS_MUC_OWNER,
         xmpp.NS_MUC_CONFIG, xmpp.NS_COMMANDS, xmpp.NS_DISCO_INFO, 'ipv6',
         'jabber:iq:gateway', xmpp.NS_LAST, xmpp.NS_PRIVACY, xmpp.NS_PRIVATE,
-        xmpp.NS_REGISTER, xmpp.NS_VERSION, xmpp.NS_DATA, xmpp.NS_ENCRYPTED, 'msglog',
-        'sslc2s', 'stringprep', xmpp.NS_PING, xmpp.NS_TIME_REVISED, xmpp.NS_SSN,
-        xmpp.NS_MOOD, xmpp.NS_ACTIVITY, xmpp.NS_NICK, xmpp.NS_ROSTERX, xmpp.NS_SECLABEL]
+        xmpp.NS_REGISTER, xmpp.NS_VERSION, xmpp.NS_DATA, xmpp.NS_ENCRYPTED,
+        'msglog', 'sslc2s', 'stringprep', xmpp.NS_PING, xmpp.NS_TIME_REVISED,
+        xmpp.NS_SSN, xmpp.NS_MOOD, xmpp.NS_ACTIVITY, xmpp.NS_NICK,
+        xmpp.NS_ROSTERX, xmpp.NS_SECLABEL]
 
 # Optional features gajim supports per account
 gajim_optional_features = {}

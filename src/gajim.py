@@ -65,9 +65,7 @@ if os.name == 'nt':
 from common import demandimport
 demandimport.enable()
 demandimport.ignore += ['gobject._gobject', 'libasyncns', 'i18n',
-    'logging.NullHandler', 'dbus.glib', 'dbus.service',
-    'command_system.implementation.standard',
-    'command_system.implementation.execute', 'OpenSSL.SSL', 'OpenSSL.crypto',
+    'logging.NullHandler', 'dbus.service', 'OpenSSL.SSL', 'OpenSSL.crypto',
     'common.sleepy', 'DLFCN', 'dl', 'xml.sax', 'xml.sax.handler', 'ic',
     'Crypto.PublicKey']
 
@@ -233,12 +231,12 @@ else:
         elif sysname in ('FreeBSD', 'OpenBSD', 'NetBSD'):
             libc.setproctitle('gajim')
 
-    if gtk.pygtk_version < (2, 16, 0):
-        pritext = _('Gajim needs PyGTK 2.16 or above')
-        sectext = _('Gajim needs PyGTK 2.16 or above to run. Quiting...')
-    elif gtk.gtk_version < (2, 16, 0):
-        pritext = _('Gajim needs GTK 2.16 or above')
-        sectext = _('Gajim needs GTK 2.16 or above to run. Quiting...')
+    if gtk.pygtk_version < (2, 22, 0):
+        pritext = _('Gajim needs PyGTK 2.22 or above')
+        sectext = _('Gajim needs PyGTK 2.22 or above to run. Quiting...')
+    elif gtk.gtk_version < (2, 22, 0):
+        pritext = _('Gajim needs GTK 2.22 or above')
+        sectext = _('Gajim needs GTK 2.22 or above to run. Quiting...')
 
     from common import check_paths
 
@@ -413,6 +411,7 @@ if __name__ == '__main__':
         sys.exit(5)
     # ^C exits the application normally to delete pid file
     signal.signal(signal.SIGINT, sigint_cb)
+    signal.signal(signal.SIGTERM, sigint_cb)
 
     log.info("Encodings: d:%s, fs:%s, p:%s", sys.getdefaultencoding(), \
             sys.getfilesystemencoding(), locale.getpreferredencoding())
@@ -453,6 +452,9 @@ if __name__ == '__main__':
             # This makes Gajim unusable under windows, and threads are used only
             # for GPG, so not under windows
             gtk.gdk.threads_init()
+            gtk.gdk.threads_enter()
         gtk.main()
+        if os.name != 'nt':
+            gtk.gdk.threads_leave()
     except KeyboardInterrupt:
         print >> sys.stderr, 'KeyboardInterrupt'

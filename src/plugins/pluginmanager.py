@@ -100,7 +100,7 @@ class PluginManager(object):
         '''
         Registered handlers of GUI extension points.
         '''
-        for path in gajim.PLUGINS_DIRS:
+        for path in [gajim.PLUGINS_DIRS[1], gajim.PLUGINS_DIRS[0]]:
             pc = PluginManager.scan_dir_for_plugins(path)
             self.add_plugins(pc)
         self._activate_all_plugins_from_global_config()
@@ -292,7 +292,7 @@ class PluginManager(object):
         :param plugin: plugin to be activated
         :type plugin: class object of `GajimPlugin` subclass
         '''
-        if not plugin.active:
+        if not plugin.active and plugin.activatable:
 
             self._add_gui_extension_points_handlers_from_plugin(plugin)
             self._handle_all_gui_extension_points_with_plugin(plugin)
@@ -374,7 +374,8 @@ class PluginManager(object):
 
     def _activate_all_plugins_from_global_config(self):
         for plugin in self.plugins:
-            if self._plugin_is_active_in_global_config(plugin):
+            if self._plugin_is_active_in_global_config(plugin) and \
+            plugin.activatable:
                 try:
                     self.activate_plugin(plugin)
                 except GajimPluginActivateException:
@@ -432,6 +433,9 @@ class PluginManager(object):
 
             elif os.path.isdir(file_path) and scan_dirs:
                 module_name = elem_name
+                if module_name in sys.modules:
+                # do not load the module twice
+                    continue
                 file_path += os.path.sep
                 try:
                     module = __import__(module_name)

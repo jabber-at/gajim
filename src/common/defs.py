@@ -27,12 +27,13 @@ docdir = '../'
 basedir   = '../'
 localedir = '../po'
 
-version = '0.15'
+version = '0.15.2'
 import subprocess
 try:
     node = subprocess.Popen('hg tip --template "{node|short}"', shell=True,
         stdout=subprocess.PIPE).communicate()[0]
-    version += '-' + node
+    if node:
+        version += '-' + node
 except Exception:
     pass
 

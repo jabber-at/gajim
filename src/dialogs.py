@@ -277,12 +277,13 @@ class ChooseGPGKeyDialog:
     """
 
     def __init__(self, title_text, prompt_text, secret_keys, on_response,
-                             selected=None):
+            selected=None, transient_for=None):
         '''secret_keys : {keyID: userName, ...}'''
         self.on_response = on_response
         xml = gtkgui_helpers.get_gtk_builder('choose_gpg_key_dialog.ui')
         self.window = xml.get_object('choose_gpg_key_dialog')
         self.window.set_title(title_text)
+        self.window.set_transient_for(transient_for)
         self.keys_treeview = xml.get_object('keys_treeview')
         prompt_label = xml.get_object('prompt_label')
         prompt_label.set_text(prompt_text)
@@ -1263,7 +1264,7 @@ class AboutDialog:
         dlg.set_transient_for(gajim.interface.roster.window)
         dlg.set_name('Gajim')
         dlg.set_version(gajim.version)
-        s = u'Copyright © 2003-2011 Gajim Team'
+        s = u'Copyright © 2003-2012 Gajim Team'
         dlg.set_copyright(s)
         copying_file_path = self.get_path('COPYING')
         if copying_file_path:
@@ -2748,6 +2749,7 @@ class PopupNotificationWindow:
         self.account = account
         self.jid = jid
         self.msg_type = msg_type
+        self.index = len(gajim.interface.roster.popup_notification_windows)
 
         xml = gtkgui_helpers.get_gtk_builder('popup_notification_window.ui')
         self.window = xml.get_object('popup_notification_window')
@@ -2831,13 +2833,16 @@ class PopupNotificationWindow:
         gajim.interface.roster.popups_notification_height -= self.window_height
         self.window.destroy()
 
-        if len(gajim.interface.roster.popup_notification_windows) > 0:
-            # we want to remove the first window added in the list
-            gajim.interface.roster.popup_notification_windows.pop(0)
+        if len(gajim.interface.roster.popup_notification_windows) > self.index:
+            # we want to remove the destroyed window from the list
+            gajim.interface.roster.popup_notification_windows.pop(self.index)
 
         # move the rest of popup windows
         gajim.interface.roster.popups_notification_height = 0
+        current_index = 0
         for window_instance in gajim.interface.roster.popup_notification_windows:
+            window_instance.index = current_index
+            current_index += 1
             window_width, window_height = window_instance.window.get_size()
             gajim.interface.roster.popups_notification_height += window_height
             window_instance.window.move(gtk.gdk.screen_width() - window_width,
@@ -2886,7 +2891,7 @@ class SingleMessageWindow:
         self.conversation_scrolledwindow = self.xml.get_object(
                 'conversation_scrolledwindow')
         self.conversation_textview = conversation_textview.ConversationTextview(
-                account)
+            account, used_in_history_window=True)
         self.conversation_textview.tv.show()
         self.conversation_tv_buffer = self.conversation_textview.tv.get_buffer()
         self.xml.get_object('conversation_scrolledwindow').add(
@@ -2983,7 +2988,6 @@ class SingleMessageWindow:
         width, height = self.window.get_size()
         gajim.config.set('single-msg-width', width)
         gajim.config.set('single-msg-height', height)
-        gajim.interface.save_config()
 
     def on_single_message_window_delete_event(self, window, ev):
         self.save_pos()
@@ -3074,7 +3078,7 @@ class SingleMessageWindow:
             # if offline or connecting
             ErrorDialog(_('Connection not available'),
                 _('Please make sure you are connected with "%s".') % self.account)
-            return
+            return True
         if isinstance(self.to, list):
             sender_list = []
             for i in self.to:
@@ -3094,7 +3098,7 @@ class SingleMessageWindow:
                 ErrorDialog(_('Invalid Jabber ID'),
                     _('It is not possible to send a message to %s, this JID is not '
                     'valid.') % to_whom_jid)
-                return
+                return True
 
             subject = self.subject_entry.get_text().decode('utf-8')
             begin, end = self.message_tv_buffer.get_bounds()
@@ -3138,7 +3142,8 @@ class SingleMessageWindow:
             session=self.session)
 
     def on_send_and_close_button_clicked(self, widget):
-        self.send_single_message()
+        if self.send_single_message():
+            return
         self.save_pos()
         self.window.destroy()
 

@@ -237,7 +237,7 @@ class Interface:
         jid = gajim.get_jid_from_account(account)
         if 'profile' not in self.instances[account]:
             self.instances[account]['profile'] = \
-                    profile_window.ProfileWindow(account)
+            profile_window.ProfileWindow(account, gajim.interface.roster.window)
             gajim.connections[account].request_vcard(jid)
 
     def handle_gc_error(self, gc_control, pritext, sectext):
@@ -1540,7 +1540,7 @@ class Interface:
                     return
 
             if type_ == 'printed_chat':
-                ctrl = event.parameters[0]
+                ctrl = event.parameters[2]
             elif type_ == 'chat':
                 session = event.parameters[8]
                 ctrl = session.control
@@ -1578,7 +1578,7 @@ class Interface:
                 event = gajim.events.get_first_event(account, jid, type_)
 
             if type_ == 'printed_pm':
-                ctrl = event.parameters[0]
+                ctrl = event.parameters[2]
             elif type_ == 'pm':
                 session = event.parameters[8]
 
