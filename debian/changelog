@@ -1,3 +1,9 @@
+gajim (0.15.4-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Mathias Ertl <apt-repository@fsinf.at>  Sat, 21 Sep 2013 15:34:17 +0200
+
 gajim (0.15.2-1) unstable; urgency=low
 
   * New upstream release.
