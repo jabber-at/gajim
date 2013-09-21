@@ -1,4 +1,4 @@
-gajim (0.15.4-0.1) unstable; urgency=low
+gajim (0.15.4-1) unstable; urgency=low
 
   * New upstream release.
   * Build with compat-level 9, depend on debhelper >= 9.
