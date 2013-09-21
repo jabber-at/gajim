@@ -70,7 +70,7 @@ from common import dbus_support
 if dbus_support.supported:
     import dbus
 
-from common.xmpp.protocol import NS_FILE
+from common.xmpp.protocol import NS_FILE, NS_ROSTERX
 from common.pep import MOODS, ACTIVITIES
 
 #(icon, name, type, jid, account, editable, second pixbuf)
@@ -1653,10 +1653,12 @@ class RosterWindow:
                 if model.iter_has_child(titer):
                     iter_c = model.iter_children(titer)
                     while iter_c:
-                        if self.rfilter_string in model[iter_c][C_NAME].lower():
+                        if self.rfilter_string in model[iter_c][C_NAME].decode(
+                        'utf-8').lower():
                             return True
                         iter_c = model.iter_next(iter_c)
-                return self.rfilter_string in model[titer][C_NAME].lower()
+                return self.rfilter_string in model[titer][C_NAME].decode(
+                    'utf-8').lower()
             if gajim.config.get('showoffline'):
                 return True
             bb_jid = None
@@ -1681,7 +1683,8 @@ class RosterWindow:
                 return self.contact_is_visible(contact, account)
         if type_ == 'agent':
             if self.rfilter_enabled:
-                return self.rfilter_string in model[titer][C_NAME].lower()
+                return self.rfilter_string in model[titer][C_NAME].decode(
+                    'utf-8').lower()
             contact = gajim.contacts.get_contact_with_highest_priority(account,
                 jid)
             return self.contact_has_pending_roster_events(contact, account) or \
@@ -1689,7 +1692,8 @@ class RosterWindow:
                 (gajim.account_is_connected(account) or \
                 gajim.config.get('showoffline')))
         if type_ == 'groupchat' and self.rfilter_enabled:
-            return self.rfilter_string in model[titer][C_NAME].lower()
+            return self.rfilter_string in model[titer][C_NAME].decode('utf-8').\
+                lower()
         return True
 
     def _compareIters(self, model, iter1, iter2, data=None):
@@ -2668,7 +2672,7 @@ class RosterWindow:
     def _nec_decrypted_message_received(self, obj):
         if not obj.msgtxt: # empty message text
             return True
-        if obj.mtype not in ('norml', 'chat'):
+        if obj.mtype not in ('normal', 'chat'):
             return
         if obj.session.control:
             typ = ''
@@ -3428,6 +3432,8 @@ class RosterWindow:
         """
         When a key is pressed in the treeviews
         """
+        print 'tree', event.keyval
+        print gtk.gdk.keyval_to_unicode(event.keyval)
         self.tooltip.hide_tooltip()
         if event.keyval == gtk.keysyms.Escape:
             if self.rfilter_enabled:
@@ -4381,7 +4387,7 @@ class RosterWindow:
 
     def on_rfilter_entry_changed(self, widget):
         """ When we update the content of the filter """
-        self.rfilter_string = widget.get_text().lower()
+        self.rfilter_string = widget.get_text().decode('utf-8').lower()
         if self.rfilter_string == '':
             self.disable_rfilter()
         self.refilter_shown_roster_items()
@@ -4389,7 +4395,7 @@ class RosterWindow:
         self.tree.get_selection().unselect_all()
         def _func(model, path, iter_):
             if model[iter_][C_TYPE] == 'contact' and self.rfilter_string in \
-            model[iter_][C_NAME].lower():
+            model[iter_][C_NAME].decode('utf-8').lower():
                 col = self.tree.get_column(0)
                 self.tree.set_cursor_on_cell(path, col)
                 return True
@@ -4402,6 +4408,7 @@ class RosterWindow:
         self.disable_rfilter()
 
     def on_rfilter_entry_key_press_event(self, widget, event):
+        print 'rfilter', event.keyval
         if event.keyval == gtk.keysyms.Escape:
             self.disable_rfilter()
         elif event.keyval == gtk.keysyms.Return:
@@ -4469,7 +4476,12 @@ class RosterWindow:
 
     def on_drop_rosterx(self, widget, account_source, c_source, account_dest,
     c_dest, was_big_brother, context, etime):
-        gajim.connections[account_dest].send_contacts([c_source], c_dest.jid)
+        type_ = 'message'
+        if c_dest.show not in ('offline', 'error') and c_dest.supports(
+        NS_ROSTERX):
+            type_ = 'iq'
+        gajim.connections[account_dest].send_contacts([c_source],
+             c_dest.get_full_jid(), type_=type_)
 
     def on_drop_in_contact(self, widget, account_source, c_source, account_dest,
     c_dest, was_big_brother, context, etime):

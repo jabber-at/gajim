@@ -438,7 +438,7 @@ class PreferencesWindow:
         renderer.set_property('editable', True)
         self.fill_msg_treeview()
         buf = self.xml.get_object('msg_textview').get_buffer()
-        buf.connect('changed', self.on_msg_textview_changed)
+        buf.connect('end-user-action', self.on_msg_textview_changed)
 
         ### Audio / Video tab ###
         def create_av_combobox(opt_name, device_dict, config_name=None,
@@ -2669,9 +2669,10 @@ class FakeDataForm(gtk.Table, object):
     table {entry1: value1}
     """
 
-    def __init__(self, infos):
+    def __init__(self, infos, selectable=False):
         gtk.Table.__init__(self)
         self.infos = infos
+        self.selectable = selectable
         self.entries = {}
         self._draw_table()
 
@@ -2684,6 +2685,8 @@ class FakeDataForm(gtk.Table, object):
             nbrow = 1
             self.resize(rows = nbrow, columns = 2)
             label = gtk.Label(self.infos['instructions'])
+            if self.selectable:
+                label.set_selectable(True)
             self.attach(label, 0, 2, 0, 1, 0, 0, 0, 0)
         for name in self.infos.keys():
             if name in ('key', 'instructions', 'x', 'registered'):
@@ -3191,19 +3194,6 @@ class ManageBookmarksWindow:
         self.window.show_all()
         # select root iter
         self.selection.select_iter(self.treestore.get_iter_root())
-
-    def on_bookmarks_treeview_button_press_event(self, widget, event):
-        (model, iter_) = self.selection.get_selected()
-        if not iter_:
-            # Removed a bookmark before
-            return
-
-        if model.iter_parent(iter_):
-            # The currently selected node is a bookmark
-            return not self.check_valid_bookmark()
-
-    def on_manage_bookmarks_window_destroy(self, widget, event):
-        del gajim.interface.instances['manage_bookmarks']
 
     def on_add_bookmark_button_clicked(self, widget):
         """
@@ -3806,10 +3796,12 @@ class AccountCreationWizardWindow:
         empty_config = True
         if obj.is_form:
             dataform = dataforms.ExtendForm(node=obj.config)
-            self.data_form_widget = dataforms_widget.DataFormWidget(dataform)
+            self.data_form_widget = dataforms_widget.DataFormWidget()
+            self.data_form_widget.selectable = True
+            self.data_form_widget.set_data_form(dataform)
             empty_config = False
         else:
-            self.data_form_widget = FakeDataForm(obj.config)
+            self.data_form_widget = FakeDataForm(obj.config, selectable=True)
             for field in obj.config:
                 if field in ('key', 'instructions', 'x', 'registered'):
                     continue

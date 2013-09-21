@@ -995,7 +995,8 @@ class ConnectionHandlersBase:
                     gajim.thread_interface(self.decrypt_thread, [encmsg, keyID,
                         obj], self._on_message_decrypted, [obj])
                 return
-        self._on_message_decrypted(None, obj)
+        gajim.nec.push_incoming_event(DecryptedMessageReceivedEvent(None,
+            conn=self, msg_obj=obj))
 
     def _on_message_decrypted(self, output, obj):
         if len(self.gpg_messages_to_decrypt):
@@ -1829,6 +1830,9 @@ ConnectionJingle, ConnectionIBBytestream):
         if not self.connection or self.connected < 2:
             return
         iq_obj = obj.stanza.buildReply('result')
+        q = iq_obj.getTag('ping')
+        if q:
+            iq_obj.delChild(q)
         self.connection.send(iq_obj)
 
     def _PrivacySetCB(self, con, iq_obj):

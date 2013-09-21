@@ -327,7 +327,10 @@ class GroupchatControl(ChatControlBase):
             if gtkgui_helpers.gtk_icon_theme.has_icon('bookmark-new'):
                 img = self.xml.get_object('image7')
                 img.set_from_icon_name('bookmark-new', gtk.ICON_SIZE_MENU)
-
+            widget.set_sensitive(
+                gajim.connections[self.account].private_storage_supported or \
+                (gajim.connections[self.account].pubsub_supported and \
+                gajim.connections[self.account].pubsub_publish_options_supported))
             widget.show()
 
         widget = self.xml.get_object('list_treeview')
@@ -840,7 +843,9 @@ class GroupchatControl(ChatControlBase):
         if self.contact.jid in gajim.config.get_per('accounts', self.account,
         'minimized_gc').split(' '):
             minimize_menuitem.set_active(True)
-        if not gajim.connections[self.account].private_storage_supported:
+        conn = gajim.connections[self.account]
+        if not conn.private_storage_supported and (not conn.pubsub_supported or \
+        not conn.pubsub_publish_options_supported):
             bookmark_room_menuitem.set_sensitive(False)
         if gajim.gc_connected[self.account][self.room_jid]:
             c = gajim.contacts.get_gc_contact(self.account, self.room_jid,
@@ -1816,7 +1821,8 @@ class GroupchatControl(ChatControlBase):
                         fake_jid)
         if nick == self.nick: # we became online
             self.got_connected()
-        self.list_treeview.expand_row((self.model.get_path(role_iter)), False)
+        if self.list_treeview.get_model():
+            self.list_treeview.expand_row((self.model.get_path(role_iter)), False)
         if self.is_continued:
             self.draw_banner_text()
         return iter_

@@ -108,9 +108,14 @@ import sqlite3 as sqlite
 
 class HistoryManager:
     def __init__(self):
-        pix = gtkgui_helpers.get_icon_pixmap('gajim')
-        # set the icon to all newly opened windows
-        gtk.window_set_default_icon(pix)
+        pixs = []
+        for size in (16, 32, 48, 64, 128):
+            pix = gtkgui_helpers.get_icon_pixmap('gajim', size)
+            if pix:
+                pixs.append(pix)
+        if pixs:
+            # set the icon to all windows
+            gtk.window_set_default_icon_list(*pixs)
 
         if not os.path.exists(LOG_DB_PATH):
             dialogs.ErrorDialog(_('Cannot find history logs database'),
@@ -458,7 +463,7 @@ class HistoryManager:
         if event.button == 3:  # right click
             xml = gtkgui_helpers.get_gtk_builder('history_manager.ui',
                 'context_menu')
-            if widget.name != 'jids_listview':
+            if gtk.Buildable.get_name(widget) != 'jids_listview':
                 xml.get_object('export_menuitem').hide()
             xml.get_object('delete_menuitem').connect('activate',
                     self.on_delete_menuitem_activate, widget)

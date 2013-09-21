@@ -34,6 +34,7 @@ import zipfile
 from common import gajim
 from plugins import GajimPlugin
 from plugins.helpers import log_calls, log
+from conversation_textview import ConversationTextview
 from dialogs import WarningDialog, HigDialog, YesNoDialog
 from plugins.gui import GajimPluginConfigDialog
 
@@ -149,7 +150,7 @@ class PluginInstaller(GajimPlugin):
     def deactivate(self):
         self.pl_menuitem.disconnect(self.id_)
         if hasattr(self, 'page_num'):
-            self.notebook.remove_page(self.page_num)
+            self.notebook.remove_page(self.notebook.page_num(self.hpaned))
             self.notebook.set_current_page(0)
             for id_, widget in self.connected_ids.items():
                 widget.disconnect(id_)
@@ -178,14 +179,14 @@ class PluginInstaller(GajimPlugin):
         self.xml = gtk.Builder()
         self.xml.set_translation_domain('gajim_plugins')
         self.xml.add_objects_from_file(self.GTK_BUILDER_FILE_PATH, ['hpaned2'])
-        hpaned = self.xml.get_object('hpaned2')
-        self.page_num = self.notebook.append_page(hpaned,
+        self.hpaned = self.xml.get_object('hpaned2')
+        self.page_num = self.notebook.append_page(self.hpaned,
             gtk.Label(_('Available')))
 
         widgets_to_extract = ('plugin_name_label1',
         'available_treeview', 'progressbar', 'inslall_upgrade_button',
         'plugin_authors_label1', 'plugin_authors_label1',
-        'plugin_homepage_linkbutton1', 'plugin_description_textview1')
+        'plugin_homepage_linkbutton1')
 
         for widget_name in widgets_to_extract:
             setattr(self, widget_name, self.xml.get_object(widget_name))
@@ -248,6 +249,11 @@ class PluginInstaller(GajimPlugin):
         selection.set_mode(gtk.SELECTION_SINGLE)
 
         self._clear_available_plugin_info()
+
+        self.plugin_description_textview = ConversationTextview(None)
+        sw = self.xml.get_object('scrolledwindow1')
+        sw.add(self.plugin_description_textview.tv)
+
         self.xml.connect_signals(self)
         self.window.show_all()
 
@@ -270,7 +276,10 @@ class PluginInstaller(GajimPlugin):
             self.inslall_upgrade_button.set_property('sensitive', True)
 
     def on_notebook_switch_page(self, widget, page, page_num):
-        if not hasattr(self, 'ftp') and self.page_num == page_num:
+        tab_label_text = self.notebook.get_tab_label_text(self.hpaned)
+        if tab_label_text != (_('Available')):
+            return
+        if not hasattr(self, 'ftp'):
             self.available_plugins_model.clear()
             self.progressbar.show()
             self.ftp = Ftp(self)
@@ -350,6 +359,11 @@ class PluginInstaller(GajimPlugin):
 
     def available_plugins_treeview_selection_changed(self, treeview_selection):
         model, iter = treeview_selection.get_selected()
+        self.xml.get_object('scrolledwindow1').get_children()[0].destroy()
+        self.plugin_description_textview = ConversationTextview(None)
+        sw = self.xml.get_object('scrolledwindow1')
+        sw.add(self.plugin_description_textview.tv)
+        sw.show_all()
         if iter:
             self.plugin_name_label1.set_text(model.get_value(iter, C_NAME))
             self.plugin_authors_label1.set_text(model.get_value(iter, C_AUTHORS))
@@ -360,9 +374,14 @@ class PluginInstaller(GajimPlugin):
             label = self.plugin_homepage_linkbutton1.get_children()[0]
             label.set_ellipsize(pango.ELLIPSIZE_END)
             self.plugin_homepage_linkbutton1.set_property('sensitive', True)
-            desc_textbuffer = self.plugin_description_textview1.get_buffer()
-            desc_textbuffer.set_text(_(model.get_value(iter, C_DESCRIPTION)))
-            self.plugin_description_textview1.set_property('sensitive', True)
+            desc = _(model.get_value(iter, C_DESCRIPTION))
+            if not desc.startswith('<body '):
+                desc = '<body  xmlns=\'http://www.w3.org/1999/xhtml\'>' + \
+                    desc + ' </body>'
+                desc = desc.replace('\n', '<br/>')
+            self.plugin_description_textview.tv.display_html(
+                desc, self.plugin_description_textview)
+            self.plugin_description_textview.tv.set_property('sensitive', True)
         else:
             self._clear_available_plugin_info()
 
@@ -372,10 +391,6 @@ class PluginInstaller(GajimPlugin):
         self.plugin_homepage_linkbutton1.set_uri('')
         self.plugin_homepage_linkbutton1.set_label('')
         self.plugin_homepage_linkbutton1.set_property('sensitive', False)
-
-        desc_textbuffer = self.plugin_description_textview1.get_buffer()
-        desc_textbuffer.set_text('')
-        self.plugin_description_textview1.set_property('sensitive', False)
 
     def scan_dir_for_plugin(self, path):
         plugins_found = []
@@ -449,7 +464,9 @@ class PluginInstaller(GajimPlugin):
                 root_iter = self.available_plugins_model.get_iter_root()
                 selection.select_iter(root_iter)
         scr_win = self.xml.get_object('scrolledwindow2')
-        scr_win.get_vadjustment().set_value(0)
+        vadjustment = scr_win.get_vadjustment()
+        if vadjustment:
+            vadjustment.set_value(0)
 
 
 class Ftp(threading.Thread):
