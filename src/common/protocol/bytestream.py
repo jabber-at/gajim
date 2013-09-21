@@ -314,9 +314,16 @@ class ConnectionSocks5Bytestream(ConnectionBytestream):
 
         if 'direction' in file_props:
             # it's a IBB
-            sid = file_props['sid']
-            if sid in self.files_props:
-                del self.files_props[sid]
+            # Close file we're receiving into
+            if 'fp' in file_props:
+                fd = file_props['fp']
+                try:
+                    fd.close()
+                except Exception:
+                    pass
+            if gajim.socks5queue.get_file_props(self.name, file_props['sid']):
+                gajim.socks5queue.remove_file_props(self.name,
+                    file_props['sid'])
 
     def _send_socks5_info(self, file_props):
         """
@@ -741,9 +748,9 @@ class ConnectionIBBytestream(ConnectionBytestream):
         elif typ == 'set' and stanza.getTag('close', namespace=xmpp.NS_IBB):
             self.StreamCloseHandler(conn, stanza)
         elif typ == 'result':
-            self.StreamCommitHandler(conn, stanza)
+            self.SendHandler()
         elif typ == 'error':
-            self.StreamOpenReplyHandler(conn, stanza)
+            gajim.socks5queue.error_cb(_('File transfer canceled'), _('An error occured while transfering file.'))
         else:
             conn.send(xmpp.Error(stanza, xmpp.ERR_BAD_REQUEST))
         raise xmpp.NodeProcessed
@@ -773,6 +780,7 @@ class ConnectionIBBytestream(ConnectionBytestream):
             rep = xmpp.Protocol('iq', stanza.getFrom(), 'result',
                 stanza.getTo(), {'id': stanza.getID()})
             file_props['block-size'] = blocksize
+            file_props['direction'] = '<'
             file_props['seq'] = 0
             file_props['received-len'] = 0
             file_props['last-time'] = time.time()
@@ -785,6 +793,16 @@ class ConnectionIBBytestream(ConnectionBytestream):
             file_props['syn_id'] = stanza.getID()
             file_props['fp'] = open(file_props['file-name'], 'w')
         conn.send(rep)
+
+    def CloseIBBStream(self, file_props):
+        file_props.connected = False
+        file_props.fp.close()
+        file_props.stopped = True
+        self.connection.send(nbxmpp.Protocol('iq',
+            file_props.direction[1:], 'set',
+            payload=[nbxmpp.Node(nbxmpp.NS_IBB + ' close',
+            {'sid':file_props.sid})]))
+
 
     def OpenStream(self, sid, to, fp, blocksize=4096):
         """
@@ -833,6 +851,9 @@ class ConnectionIBBytestream(ConnectionBytestream):
                 continue
             if file_props['direction'][0] == '>':
                 if 'paused' in file_props and file_props['paused']:
+                    continue
+                if 'connected' in file_props and file_props['connected']:
+                    #TODO: Reply with out of order error
                     continue
                 chunk = file_props['fp'].read(file_props['block-size'])
                 if chunk:
@@ -926,6 +947,10 @@ class ConnectionIBBytestream(ConnectionBytestream):
             file_props = gajim.socks5queue.get_file_props(self.name, sid)
             conn.send(stanza.buildReply('result'))
             file_props['fp'].close()
+            file_props['completed'] = file_props['received_len'] >= \
+                file_props['size']
+            if not file_props['completed']:
+                file_props['error'] = -1
             gajim.socks5queue.complete_transfer_cb(self.name, file_props)
             gajim.socks5queue.remove_file_props(self.name, sid)
         else:
@@ -942,8 +967,10 @@ class ConnectionIBBytestream(ConnectionBytestream):
         log.debug('IBBAllIqHandler called syn_id->%s' % syn_id)
         for sid in self.files_props.keys():
             file_props = self.files_props[sid]
-            if not 'direction' in file_props:
+            if not 'direction' in file_props or not 'connected' in file_props \
+            or not file_props['connected']:
                 # It's socks5 bytestream
+                # Or we closed the IBB stream
                 continue
             if file_props['syn_id'] == syn_id:
                 if stanza.getType() == 'error':
@@ -964,6 +991,7 @@ class ConnectionIBBytestream(ConnectionBytestream):
             if stanza.getTag('data'):
                 if self.IBBMessageHandler(conn, stanza):
                     reply = stanza.buildReply('result')
+                    reply.delChild(reply.getQuery())
                     conn.send(reply)
                     raise xmpp.NodeProcessed
             elif syn_id == self.last_sent_ibb_id:

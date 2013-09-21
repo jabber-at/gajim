@@ -1171,6 +1171,8 @@ class Connection(CommonConnection, ConnectionHandlers):
                 port = self._current_host['port']
 
             cacerts = os.path.join(common.gajim.DATA_DIR, 'other', 'cacerts.pem')
+            if not os.path.exists(cacerts):
+                cacerts = ''
             mycerts = common.gajim.MY_CACERTS
             secure_tuple = (self._current_type, cacerts, mycerts)
 
@@ -1311,45 +1313,51 @@ class Connection(CommonConnection, ConnectionHandlers):
         try:
             errnum = con.Connection.ssl_errnum
         except AttributeError:
-            errnum = -1 # we don't have an errnum
-        if errnum > 0 and str(errnum) not in gajim.config.get_per('accounts',
-        self.name, 'ignore_ssl_errors').split():
-            text = _('The authenticity of the %s certificate could be invalid.'
-                ) % hostname
-            if errnum in ssl_error:
-                text += _('\nSSL Error: <b>%s</b>') % ssl_error[errnum]
-            else:
-                text += _('\nUnknown SSL error: %d') % errnum
-            gajim.nec.push_incoming_event(SSLErrorEvent(None, conn=self,
-                error_text=text, error_num=errnum,
-                cert=con.Connection.ssl_cert_pem,
-                fingerprint=con.Connection.ssl_fingerprint_sha1,
-                certificate=con.Connection.ssl_certificate))
-            return True
-        if hasattr(con.Connection, 'ssl_fingerprint_sha1'):
+            errnum = [] # we don't have an errnum
+        i = 0
+        for er in errnum:
+            if er > 0 and str(er) not in gajim.config.get_per('accounts',
+            self.name, 'ignore_ssl_errors').split():
+                text = _('The authenticity of the %s certificate could be '
+                    'invalid.') % hostname
+                if er in ssl_error:
+                    text += _('\nSSL Error: <b>%s</b>') % ssl_error[er]
+                else:
+                    text += _('\nUnknown SSL error: %d') % er
+                gajim.nec.push_incoming_event(SSLErrorEvent(None, conn=self,
+                    error_text=text, error_num=er,
+                    cert=con.Connection.ssl_cert_pem[i],
+                    fingerprint=con.Connection.ssl_fingerprint_sha1[i],
+                    certificate=con.Connection.ssl_certificate[i]))
+                return True
+            i += 1
+        if con.Connection.ssl_fingerprint_sha1:
             saved_fingerprint = gajim.config.get_per('accounts', self.name,
                 'ssl_fingerprint_sha1')
             if saved_fingerprint:
                 # Check sha1 fingerprint
-                if con.Connection.ssl_fingerprint_sha1 != saved_fingerprint:
+                if con.Connection.ssl_fingerprint_sha1[-1] != saved_fingerprint:
                     gajim.nec.push_incoming_event(FingerprintErrorEvent(None,
-                        conn=self, certificate=con.Connection.ssl_certificate,
-                        new_fingerprint=con.Connection.ssl_fingerprint_sha1))
+                        conn=self,
+                        certificate=con.Connection.ssl_certificate[-1],
+                        new_fingerprint=con.Connection.ssl_fingerprint_sha1[
+                        -1]))
                     return True
             else:
                 gajim.config.set_per('accounts', self.name,
-                    'ssl_fingerprint_sha1', con.Connection.ssl_fingerprint_sha1)
-            if not check_X509.check_certificate(con.Connection.ssl_certificate,
-            hostname) and '100' not in gajim.config.get_per('accounts',
+                    'ssl_fingerprint_sha1',
+                    con.Connection.ssl_fingerprint_sha1[-1])
+            if not check_X509.check_certificate(con.Connection.ssl_certificate[
+            -1], hostname) and '100' not in gajim.config.get_per('accounts',
             self.name, 'ignore_ssl_errors').split():
                 txt = _('The authenticity of the %s certificate could be '
                     'invalid.\nThe certificate does not cover this domain.') % \
                     hostname
                 gajim.nec.push_incoming_event(SSLErrorEvent(None, conn=self,
                     error_text=txt, error_num=100,
-                    cert=con.Connection.ssl_cert_pem,
-                    fingerprint=con.Connection.ssl_fingerprint_sha1,
-                    certificate=con.Connection.ssl_certificate))
+                    cert=con.Connection.ssl_cert_pem[-1],
+                    fingerprint=con.Connection.ssl_fingerprint_sha1[-1],
+                    certificate=con.Connection.ssl_certificate[-1]))
                 return True
 
         self._register_handlers(con, con_type)
@@ -1654,7 +1662,7 @@ class Connection(CommonConnection, ConnectionHandlers):
 
         # If we are not resuming, we ask for discovery info
         # and archiving preferences
-        if not self.sm.resuming:
+        if not self.sm.supports_sm or (not self.sm.resuming and self.sm.enabled):
             self.request_message_archiving_preferences()
             self.discoverInfo(gajim.config.get_per('accounts', self.name,
                 'hostname'), id_prefix='Gajim_')
@@ -1669,7 +1677,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             self._stun_servers = self._hosts = [i for i in result_array]
 
     def _request_privacy(self):
-        if not gajim.account_is_connected(self.name):
+        if not gajim.account_is_connected(self.name) or not self.connection:
             return
         iq = common.xmpp.Iq('get', common.xmpp.NS_PRIVACY, xmlns = '')
         id_ = self.connection.getAnID()
@@ -1875,26 +1883,30 @@ class Connection(CommonConnection, ConnectionHandlers):
             form_node=obj.form_node, original_message=obj.original_message,
             delayed=obj.delayed, callback=cb)
 
-    def send_contacts(self, contacts, jid):
+    def send_contacts(self, contacts, jid, fjid, type_='message'):
         """
         Send contacts with RosterX (Xep-0144)
         """
         if not gajim.account_is_connected(self.name):
             return
-        if len(contacts) == 1:
-            msg = _('Sent contact: "%s" (%s)') % (contacts[0].get_full_jid(),
+        if type_ == 'message':
+            if len(contacts) == 1:
+                msg = _('Sent contact: "%s" (%s)') % (contacts[0].get_full_jid(),
                     contacts[0].get_shown_name())
-        else:
-            msg = _('Sent contacts:')
-            for contact in contacts:
-                msg += '\n "%s" (%s)' % (contact.get_full_jid(),
+            else:
+                msg = _('Sent contacts:')
+                for contact in contacts:
+                    msg += '\n "%s" (%s)' % (contact.get_full_jid(),
                         contact.get_shown_name())
-        msg_iq = common.xmpp.Message(to=jid, body=msg)
-        x = msg_iq.addChild(name='x', namespace=common.xmpp.NS_ROSTERX)
+            stanza = common.xmpp.Message(to=gajim.get_jid_without_resource(fjid),
+                body=msg)
+        elif type_ == 'iq':
+            stanza = nbxmpp.Iq(to=fjid, typ='set')
+        x = stanza.addChild(name='x', namespace=common.xmpp.NS_ROSTERX)
         for contact in contacts:
             x.addChild(name='item', attrs={'action': 'add', 'jid': contact.jid,
-                    'name': contact.get_shown_name()})
-        self.connection.send(msg_iq)
+                'name': contact.get_shown_name()})
+        self.connection.send(stanza)
 
     def send_stanza(self, stanza):
         """
@@ -2383,7 +2395,11 @@ class Connection(CommonConnection, ConnectionHandlers):
         if not change_nick:
             t = p.setTag(common.xmpp.NS_MUC + ' x')
             tags = {}
-            timeout = gajim.config.get('muc_restore_timeout') * 60
+            timeout = gajim.config.get_per('rooms', room_jid,
+                'muc_restore_timeout')
+            if timeout is None or timeout == -2:
+                timeout = gajim.config.get('muc_restore_timeout')
+            timeout *= 60
             if timeout >= 0:
                 last_date = self.last_history_time[room_jid]
                 if last_date == 0:
@@ -2393,7 +2409,9 @@ class Connection(CommonConnection, ConnectionHandlers):
                 last_date = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(
                     last_date))
                 tags['since'] = last_date
-            nb = gajim.config.get('muc_restore_lines')
+            nb = gajim.config.get_per('rooms', room_jid, 'muc_restore_lines')
+            if nb is None or nb == -2:
+                nb = gajim.config.get('muc_restore_lines')
             if nb >= 0:
                 tags['maxstanzas'] = nb
             if tags:
@@ -2634,6 +2652,9 @@ class Connection(CommonConnection, ConnectionHandlers):
         self.connection.send(message)
 
     def check_pingalive(self):
+        if not gajim.config.get_per('accounts', self.name, 'active'):
+            # Account may have been disabled
+            return
         if self.awaiting_xmpp_ping_id:
             # We haven't got the pong in time, disco and reconnect
             log.warn("No reply received for keepalive ping. Reconnecting.")

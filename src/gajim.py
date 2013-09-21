@@ -67,7 +67,7 @@ demandimport.enable()
 demandimport.ignore += ['gobject._gobject', 'libasyncns', 'i18n',
     'logging.NullHandler', 'dbus.service', 'OpenSSL.SSL', 'OpenSSL.crypto',
     'common.sleepy', 'DLFCN', 'dl', 'xml.sax', 'xml.sax.handler', 'ic',
-    'Crypto.PublicKey']
+    'Crypto.PublicKey', 'IPython', 'contextlib', 'imp']
 
 if os.name == 'nt':
     import locale
@@ -359,9 +359,33 @@ def pid_alive():
     # Assume Gajim is running.
     return True
 
+def show_remote_gajim_roster():
+    try:
+        import dbus
+
+        OBJ_PATH = '/org/gajim/dbus/RemoteObject'
+        INTERFACE = 'org.gajim.dbus.RemoteInterface'
+        SERVICE = 'org.gajim.dbus'
+
+        # Attempt to call show_roster
+        dbus.Interface(dbus.SessionBus().get_object(SERVICE, OBJ_PATH), INTERFACE).__getattr__("show_roster")()
+
+        return True
+    except Exception:
+        return False
+
 if pid_alive():
-    pix = gtkgui_helpers.get_icon_pixmap('gajim', 48)
-    gtk.window_set_default_icon(pix) # set the icon to all newly opened wind
+    if (show_remote_gajim_roster()):
+        print("Gajim is already running, bringing the roster to front...")
+        sys.exit(0)
+    pixs = []
+    for size in (16, 32, 48, 64, 128):
+        pix = gtkgui_helpers.get_icon_pixmap('gajim', size)
+        if pix:
+            pixs.append(pix)
+    if pixs:
+        # set the icon to all windows
+        gtk.window_set_default_icon_list(*pixs)
     pritext = _('Gajim is already running')
     sectext = _('Another instance of Gajim seems to be running\nRun anyway?')
     dialog = dialogs.YesNoDialog(pritext, sectext)
