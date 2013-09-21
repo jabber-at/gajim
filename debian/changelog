@@ -2,8 +2,9 @@ gajim (0.15.4-0.1) unstable; urgency=low
 
   * New upstream release.
   * Build with compat-level 9, depend on debhelper >= 9.
+  * Fix the Maintainer field in debian/control.
 
- -- Mathias Ertl <apt-repository@fsinf.at>  Sat, 21 Sep 2013 15:34:17 +0200
+ -- Mathias Ertl <mati@fsinf.at>  Sat, 21 Sep 2013 15:34:17 +0200
 
 gajim (0.15.2-1) unstable; urgency=low
 
@@ -11,7 +12,7 @@ gajim (0.15.2-1) unstable; urgency=low
   * migrate to python-farstream instead of python-farsight
   * bump required python-gtk2 dependency to 2.22.0
 
- -- Mathias Ertl <apt-repository@fsinf.at>  Sat, 15 Dec 2012 20:41:19 +0100
+ -- Mathias Ertl <mati@fsinf.at>  Sat, 15 Dec 2012 20:41:19 +0100
 
 gajim (0.15-1) unstable; urgency=low
 
