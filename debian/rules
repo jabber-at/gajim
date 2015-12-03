@@ -3,12 +3,13 @@
 %:
 	dh $@ --with python2
 
-# test target is broken
+# The Makefile test target is broken and refers to a non-existant test/runtests.py;
+# in fact that target should not exist at all.
 override_dh_auto_test:
 
-override_dh_auto_configure:
+override_dh_auto_build:
 	convert icons/hicolor/64x64/apps/gajim.png -resize 32x32 debian/gajim.xpm
-	dh_auto_configure
+	dh_auto_build
 
 override_dh_auto_clean:
 	-rm -f debian/gajim.xpm

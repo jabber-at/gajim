@@ -1,27 +1,144 @@
-This package was debianized by Yann Leboulanger asterix@lagaule.org on
-Wed, 16 Jun 2005 20:00:00 +0100.
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Gajim
+Upstream-Contact: Gajim <xmpp:gajim@conference.gajim.org?join>
+Source: http://gajim.org/
+License: GPL-2 and GPL-3
 
-It was downloaded from:
- http://www.gajim.org/downloads/
+Files: *
+Copyright: 2003-2013 Gajim Team,
+           2003-2012 Yann Leboulanger <asterix AT lagaule.org>,
+           2010-2012 Denis Fomin <fominde AT gmail.com>,
+           2008 Jonathan Schleifer <js-gajim AT webkeks.org>,
+           2006 Stefan Bethge <stefan AT lanpartei.de>,
+           2007-2009 Stephan Erb <steve-e AT h3c.de>,
+           2003-2005 Vincent Hanquez <tab AT snarc.org>,
+           2005-2006 Dimitur Kirov <dkirov AT gmail.com>,
+           2005-2008 Nikos Kouremenos <kourem AT gmail.com>,
+           2005-2008 Travis Shirk <travis AT pobox.com>,
+           2007-2008 Brendan Taylor <whateley AT gmail.com>,
+           2006-2008 Jean-Marie Traissard <jim AT lapin.org>,
+           2006-2007 Tomasz Melcer <liori AT exroot.org>,
+           2007 Lukas Petrovicky <lukas AT petrovicky.net>,
+           2007 Julien Pivotto <roidelapluie AT gmail.com>,
+           2006 Junglecow J <junglecow AT gmail.com>,
+           2005 Stéphan Kochen <stephan AT kochen.nl>,
+           2005-2006 Alex Mauer <hawke AT hawkesnest.net,
+           2007 James Newton <redshodan AT gmail.com>,
+           2005-2006 Andrew Sayman <lorien420 AT myrealbox.com>,
+           2006-2007 Matt Mackall <mpm@selenic.com>,
+           2006 Christoph Neuroth <delmonico AT gmx.net>,
+           2009 Benjamin Richter <br AT waldteufel-online.net>,
+           2008 Thorsten P.,
+           2009 Thorsten Glaser <t.glaser AT tarent.de>,
+           2005 Norman Rasmussen <norman AT rasmussen.co.za>,
+           2009 Bruno Tarquini <btarquini AT gmail.com>,
+           2009 Anaël Verrier <elghinn AT free.fr>,
+           2005-2006 Gustavo J. A. M. Carneiro <gjcarneiro AT gmail.com>,
+           2007 Piotr Gaczkowski <doomhammerng AT gmail.com>,
+           2006 Santiago Gala,
+           2008 Mateusz Biliński <mateusz AT bilinski.it>,
+           2005 Alex Podaras <bigpod AT gmail.com>,
+           2006 Geobert Quach <geobert AT gmail.com>,
+           2006 Jeffrey C. Ollie <jeff AT ocjtech.us>,
+           2005 Sebastian Estienne,
+           2007 Gerald Kaszuba
+License: GPL-3
 
-Upstream Authors:
-      - Denis Fomin <fominde@gmail.com>
-      - Yann Leboulanger <asterix@lagaule.org>
- 
+Files: src/common/multimedia_helpers.py
+Copyright: 2009 Thibaut GIRKA <thib AT sitedethib.com>
+License: GPL-2
 
-Copyright: (c) 2003-2012 Gajim Team
+Files: src/common/jingle*
+Copyright: 2006 Gajim Team
+License: GPL-2
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; version 3
- 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
- 
-You should have received a copy of the GNU General Public License
-along with Debian system; see the file /usr/share/common-licenses/GPL-3. If not,
-write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA  02110-1301, USA.
+Files: src/command_system/*
+Copyright: 2009-2010  Alexander Cherniuk <ts33kr@gmail.com>
+License: GPL-3+
 
+Files: src/command_system/dispatcher.py
+       src/command_system/tools.py
+       src/command_system/implementation/custom.py
+       src/command_system/implementation/execute.py
+       src/command_system/implementation/middleware.py
+Copyright: 2009-2010 Alexander Cherniuk <ts33kr@gmail.com>
+License: BSD-2-clause
+
+Files: debian/*
+Copyright: 2005-2013 Yann Leboulanger <asterix@lagaule.org>,
+           2013 Tanguy Ortolo <tanguy+debian@ortolo.eu>
+License: GPL-3
+
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ Redistributions of source code must retain the above copyright notice, this
+ list of conditions and the following disclaimer.  Redistributions in binary
+ form must reproduce the above copyright notice, this list of conditions and
+ the following disclaimer in the documentation and/or other materials provided
+ with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: GPL-2
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2 only.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License along
+ with this program; if not, write to the Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ .
+ On Debian systems, the full text of the GNU General Public
+ License version 2 can be found in the file
+ `/usr/share/common-licenses/GPL-2'.
+
+License: GPL-3
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, version 3 only.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the full text of the GNU General Public
+ License version 3 can be found in the file
+ `/usr/share/common-licenses/GPL-3'.
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the full text of the GNU General Public
+ License version 3 can be found in the file
+ `/usr/share/common-licenses/GPL-3'.

@@ -1,19 +1,31 @@
 Source: gajim
 Section: net
 Priority: optional
-Maintainer: Mathias Ertl <mati@fsinf.at>
-Build-Depends: debhelper (>= 9), python (>= 2.6.6-3~), gettext (>= 0.17-4), intltool (>= 0.40.1), imagemagick, libglib2.0-dev
-Standards-Version: 3.9.4
+Maintainer: Mathias Ertl <mati@jabber.at>
+XSBC-Orig-Maintainer: Maintainer: Tanguy Ortolo <tanguy+debian@ortolo.eu>
+Build-Depends: debhelper (>= 9), autotools-dev,
+               python (>= 2.6.6-3~), gettext (>= 0.17-4), intltool (>= 0.40.1), imagemagick, libglib2.0-dev
+Standards-Version: 3.9.6
 Homepage: http://www.gajim.org
-Vcs-Hg: http://hg.gajim.org/gajim/
-Vcs-Browser: http://hg.gajim.org/gajim/file
+Vcs-Git: https://github.com/jabber-at/gajim.git
+Vcs-Browser: https://github.com/jabber-at/gajim
 
 Package: gajim
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-gtk2 (>= 2.22.0), dnsutils
-Recommends: dbus, python-dbus, notification-daemon, python-openssl (>= 0.12), python-crypto, python-pyasn1
-Suggests: python-gconf, python-gnome2, nautilus-sendto, avahi-daemon, python-avahi, network-manager, libgtkspell0, aspell-en, python-gnomekeyring, gnome-keyring, python-kerberos (>= 1.1), texlive-latex-base, dvipng, python-farstream, gstreamer0.10-plugins-ugly, python-pycurl, python-gupnp-igd
-Description: Jabber client written in PyGTK
+Depends: ${misc:Depends}, ${python:Depends}, python-gtk2 (>= 2.22.0), dnsutils,
+            dbus, python-dbus (>=0.81), python-nbxmpp
+Recommends: python-openssl (>= 0.12), python-pyasn1, python-crypto,
+            notification-daemon, ca-certificates
+Suggests: libxss1,
+          avahi-daemon, python-avahi,
+          libgtkspell0, aspell-en | aspell-dictionary,
+          python-gnome2, python-gnomekeyring, gnome-keyring, kwalletcli,
+          python-kerberos (>= 1.1),
+          texlive-latex-base, dvipng,
+          python-farstream, gstreamer0.10-plugins-ugly,
+          python-gconf, nautilus-sendto, network-manager,
+          python-pycurl, python-gupnp-igd
+Description: GTK+-based Jabber client
  Gajim is a Jabber client. It has a tabbed user interface with normal chats,
  group chats, and has many features such as, TLS, GPG, SSL, multiple accounts,
  avatars, file transfers, audio/video call, D-Bus and Metacontacts.
