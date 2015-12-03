@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/message_window.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2008 Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Geobert Quach <geobert AT gmail.com>
@@ -84,6 +84,8 @@ class MessageWindow(object):
             self.parent_paned = parent_paned
             self.notebook.reparent(self.parent_paned)
             self.parent_paned.pack2(self.notebook, resize=True, shrink=True)
+            gajim.interface.roster.xml.get_object('show_roster_menuitem').\
+                set_sensitive(True)
             orig_window.destroy()
             del orig_window
 
@@ -143,8 +145,6 @@ class MessageWindow(object):
             self.notebook.set_show_tabs(False)
         self.notebook.set_show_border(gajim.config.get('tabs_border'))
         self.show_icon()
-
-        gobject.idle_add(self.notebook.grab_focus)
 
     def change_account_name(self, old_name, new_name):
         if old_name in self._controls:
@@ -216,12 +216,16 @@ class MessageWindow(object):
                 win.destroy()
 
             if not gajim.config.get('confirm_close_multiple_tabs'):
+                for ctrl in self.controls():
+                    if ctrl.minimizable():
+                        ctrl.minimize()
                 # destroy window
                 return False
             dialogs.YesNoDialog(
                 _('You are going to close several tabs'),
                 _('Do you really want to close them all?'),
-                checktext=_('_Do not ask me again'), on_response_yes=on_yes1)
+                checktext=_('_Do not ask me again'), on_response_yes=on_yes1,
+                transient_for=self.window)
             return True
 
         def on_yes(ctrl):
@@ -307,6 +311,7 @@ class MessageWindow(object):
         # NOTE: we do not call set_control_active(True) since we don't know
         # whether the tab is the active one.
         self.show_title()
+        gobject.timeout_add(500, control.msg_textview.grab_focus)
 
     def on_tab_eventbox_button_press_event(self, widget, event, child):
         if event.button == 3: # right click
@@ -613,6 +618,8 @@ class MessageWindow(object):
                 # Don't close parent window, just remove the child
                 child = self.parent_paned.get_child2()
                 self.parent_paned.remove(child)
+                gajim.interface.roster.xml.get_object('show_roster_menuitem').\
+                    set_sensitive(False)
             else:
                 self.window.destroy()
             return # don't show_title, we are dead
@@ -1000,7 +1007,7 @@ class MessageWindowMgr(gobject.GObject):
             return
         win.resize(size[0], size[1])
         if win.parent_paned:
-            win.parent_paned.set_position(parent_size[0])
+            win.parent_paned.set_position(gajim.config.get('roster_hpaned_position'))
 
     def _position_window(self, win, acct, type_):
         """
@@ -1254,6 +1261,8 @@ class MessageWindowMgr(gobject.GObject):
                 # Don't close parent window, just remove the child
                 child = w.parent_paned.get_child2()
                 w.parent_paned.remove(child)
+                gajim.interface.roster.xml.get_object('show_roster_menuitem').\
+                    set_sensitive(False)
                 gtkgui_helpers.resize_window(w.window,
                         gajim.config.get('roster_width'),
                         gajim.config.get('roster_height'))
@@ -1267,3 +1276,17 @@ class MessageWindowMgr(gobject.GObject):
                                         ctrl.type_id)
             ctrl.parent_win = mw
             mw.new_tab(ctrl)
+
+    def save_opened_controls(self):
+        if not gajim.config.get('remember_opened_chat_controls'):
+            return
+        chat_controls = {}
+        for acct in gajim.connections:
+            chat_controls[acct] = []
+        for ctrl in self.get_controls(type_=message_control.TYPE_CHAT):
+            acct = ctrl.account
+            if ctrl.contact.jid not in chat_controls[acct]:
+                chat_controls[acct].append(ctrl.contact.jid)
+        for acct in gajim.connections:
+            gajim.config.set_per('accounts', acct, 'opened_chat_controls',
+                ','.join(chat_controls[acct]))

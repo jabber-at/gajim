@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/gajim.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
@@ -28,11 +28,12 @@
 ##
 
 import sys
+import os
 import logging
 import locale
 
 import config
-import xmpp
+import nbxmpp
 import defs
 import common.ged
 
@@ -62,6 +63,7 @@ MY_ICONSETS_PATH = gajimpaths['MY_ICONSETS']
 MY_MOOD_ICONSETS_PATH = gajimpaths['MY_MOOD_ICONSETS']
 MY_ACTIVITY_ICONSETS_PATH = gajimpaths['MY_ACTIVITY_ICONSETS']
 MY_CACERTS = gajimpaths['MY_CACERTS']
+MY_PEER_CERTS_PATH = gajimpaths['MY_PEER_CERTS']
 TMP = gajimpaths['TMP']
 DATA_DIR = gajimpaths['DATA']
 ICONS_DIR = gajimpaths['ICONS']
@@ -69,6 +71,7 @@ HOME_DIR = gajimpaths['HOME']
 PLUGINS_DIRS = [gajimpaths['PLUGINS_BASE'],
                 gajimpaths['PLUGINS_USER']]
 PLUGINS_CONFIG_DIR = gajimpaths['PLUGINS_CONFIG_DIR']
+MY_CERT_DIR = gajimpaths['MY_CERT']
 
 try:
     LANG = locale.getdefaultlocale()[0] # en_US, fr_FR, el_GR etc..
@@ -170,12 +173,22 @@ else:
     if subprocess.call(gpg_cmd, shell=True):
         HAVE_GPG = False
 
-# Depends on use_latex option. Will be correctly set after we config options are
-# read.
-HAVE_LATEX = False
+HAVE_PYOPENSSL = True
+try:
+    import OpenSSL.SSL
+    import OpenSSL.crypto
+    ver = OpenSSL.__version__
+    ver_l = [int(i) for i in ver.split('.')]
+    if ver_l < [0, 12]:
+        raise ImportError
+except Exception:
+    HAVE_PYOPENSSL = False
 
 HAVE_FARSTREAM = True
 try:
+    if os.name == 'nt':
+        os.environ['FS_PLUGIN_PATH'] = 'gtk\\lib\\farstream-0.1'
+        os.environ['GST_PLUGIN_PATH'] = 'gtk\\lib\\gstreamer-0.10'
     farstream = __import__('farstream')
     import gst
     import glib
@@ -184,7 +197,7 @@ try:
         session = conference.new_session(farstream.MEDIA_TYPE_AUDIO)
         del session
         del conference
-    except glib.GError:
+    except:
         HAVE_FARSTREAM = False
 
 except ImportError:
@@ -205,14 +218,16 @@ except ImportError:
 
 
 gajim_identity = {'type': 'pc', 'category': 'client', 'name': 'Gajim'}
-gajim_common_features = [xmpp.NS_BYTESTREAM, xmpp.NS_SI, xmpp.NS_FILE,
-        xmpp.NS_MUC, xmpp.NS_MUC_USER, xmpp.NS_MUC_ADMIN, xmpp.NS_MUC_OWNER,
-        xmpp.NS_MUC_CONFIG, xmpp.NS_COMMANDS, xmpp.NS_DISCO_INFO, 'ipv6',
-        'jabber:iq:gateway', xmpp.NS_LAST, xmpp.NS_PRIVACY, xmpp.NS_PRIVATE,
-        xmpp.NS_REGISTER, xmpp.NS_VERSION, xmpp.NS_DATA, xmpp.NS_ENCRYPTED,
-        'msglog', 'sslc2s', 'stringprep', xmpp.NS_PING, xmpp.NS_TIME_REVISED,
-        xmpp.NS_SSN, xmpp.NS_MOOD, xmpp.NS_ACTIVITY, xmpp.NS_NICK,
-        xmpp.NS_ROSTERX, xmpp.NS_SECLABEL]
+gajim_common_features = [nbxmpp.NS_BYTESTREAM, nbxmpp.NS_SI, nbxmpp.NS_FILE,
+    nbxmpp.NS_MUC, nbxmpp.NS_MUC_USER, nbxmpp.NS_MUC_ADMIN, nbxmpp.NS_MUC_OWNER,
+    nbxmpp.NS_MUC_CONFIG, nbxmpp.NS_COMMANDS, nbxmpp.NS_DISCO_INFO, 'ipv6',
+    'jabber:iq:gateway', nbxmpp.NS_LAST, nbxmpp.NS_PRIVACY, nbxmpp.NS_PRIVATE,
+    nbxmpp.NS_REGISTER, nbxmpp.NS_VERSION, nbxmpp.NS_DATA, nbxmpp.NS_ENCRYPTED,
+    'msglog', 'sslc2s', 'stringprep', nbxmpp.NS_PING, nbxmpp.NS_TIME_REVISED,
+    nbxmpp.NS_SSN, nbxmpp.NS_MOOD, nbxmpp.NS_ACTIVITY, nbxmpp.NS_NICK,
+    nbxmpp.NS_ROSTERX, nbxmpp.NS_SECLABEL, nbxmpp.NS_HASHES,
+    nbxmpp.NS_HASHES_MD5, nbxmpp.NS_HASHES_SHA1, nbxmpp.NS_HASHES_SHA256,
+    nbxmpp.NS_HASHES_SHA512, nbxmpp.NS_CORRECT, nbxmpp.NS_CONFERENCE]
 
 # Optional features gajim supports per account
 gajim_optional_features = {}
@@ -222,6 +237,12 @@ caps_hash = {}
 
 import caps_cache
 caps_cache.initialize(logger)
+
+global_id = 0
+def get_an_id():
+    global global_id
+    global_id += 1
+    return global_id
 
 def get_nick_from_jid(jid):
     pos = jid.find('@')

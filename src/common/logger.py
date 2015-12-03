@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/logger.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004-2005 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005-2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
@@ -92,7 +92,8 @@ class Constants:
                 self.TYPE_RSS,
                 self.TYPE_WEATHER,
                 self.TYPE_MRIM,
-        ) = range(14)
+                self.TYPE_NO_TRANSPORT,
+        ) = range(15)
 
         (
                 self.SUBSCRIPTION_NONE,
@@ -148,7 +149,8 @@ class Logger:
 
     def attach_cache_database(self):
         try:
-            self.cur.execute("ATTACH DATABASE '%s' AS cache" % CACHE_DB_PATH)
+            self.cur.execute("ATTACH DATABASE '%s' AS cache" % \
+                CACHE_DB_PATH.replace("'", "''"))
         except sqlite.Error, e:
             log.debug("Failed to attach cache database: %s" % str(e))
 
@@ -339,6 +341,8 @@ class Logger:
             return constants.TYPE_WEATHER
         if type_ == 'mrim':
             return constants.TYPE_MRIM
+        if type_ == 'jabber':
+            return constants.TYPE_NO_TRANSPORT
         return None
 
     def convert_api_values_to_human_transport_type(self, type_id):
@@ -373,6 +377,8 @@ class Logger:
             return 'weather'
         if type_id == constants.TYPE_MRIM:
             return 'mrim'
+        if type_id == constants.TYPE_NO_TRANSPORT:
+            return 'jabber'
 
     def convert_human_subscription_values_to_db_api_values(self, sub):
         """
@@ -643,7 +649,8 @@ class Logger:
         results = self.cur.fetchall()
         return results
 
-    def get_search_results_for_query(self, jid, query, account):
+    def get_search_results_for_query(self, jid, query, account, year=False,
+        month=False, day=False):
         """
         Returns contact_name, time, kind, show, message
 
@@ -666,7 +673,19 @@ class Logger:
         else: # user just typed something, we search in message column
             where_sql, jid_tuple = self._build_contact_where(account, jid)
             like_sql = '%' + query.replace("'", "''") + '%'
-            self.cur.execute('''
+            if year:
+                start_of_day = self.get_unix_time_from_date(year, month, day)
+                seconds_in_a_day = 86400 # 60 * 60 * 24
+                last_second_of_day = start_of_day + seconds_in_a_day - 1
+                self.cur.execute('''
+                SELECT contact_name, time, kind, show, message, subject FROM logs
+                WHERE (%s) AND message LIKE '%s'
+                AND time BETWEEN %d AND %d
+                ORDER BY time
+                ''' % (where_sql, like_sql, start_of_day, last_second_of_day),
+                    jid_tuple)
+            else:
+                self.cur.execute('''
                 SELECT contact_name, time, kind, show, message, subject FROM logs
                 WHERE (%s) AND message LIKE '%s'
                 ORDER BY time

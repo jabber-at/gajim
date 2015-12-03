@@ -6,7 +6,7 @@
 ## Copyright (C) 2006-2007 Tomasz Melcer <liori AT exroot.org>
 ##                         Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Julien Pivotto <roidelapluie AT gmail.com>
 ## Copyright (C) 2007-2008 Brendan Taylor <whateley AT gmail.com>
 ##                         Jean-Marie Traissard <jim AT lapin.org>
@@ -33,21 +33,24 @@ import base64
 import sys
 import operator
 import hashlib
+import gobject
+import locale
 
 from time import (altzone, daylight, gmtime, localtime, mktime, strftime,
         time as time_time, timezone, tzname)
 from calendar import timegm
 
-import common.xmpp
+import nbxmpp
 import common.caps_cache as capscache
 
+from pep import LOCATION_DATA
 from common import helpers
 from common import gajim
 from common import exceptions
 from common import dataforms
+from common import jingle_xtls
 from common.commands import ConnectionCommands
 from common.pubsub import ConnectionPubSub
-from common.pep import ConnectionPEP
 from common.protocol.caps import ConnectionCaps
 from common.protocol.bytestream import ConnectionSocks5Bytestream
 from common.protocol.bytestream import ConnectionIBBytestream
@@ -79,6 +82,7 @@ METACONTACTS_ARRIVED = 'metacontacts_arrived'
 ROSTER_ARRIVED = 'roster_arrived'
 DELIMITER_ARRIVED = 'delimiter_arrived'
 PRIVACY_ARRIVED = 'privacy_arrived'
+BLOCKING_ARRIVED = 'blocking_arrived'
 PEP_CONFIG = 'pep_config'
 HAS_IDLE = True
 try:
@@ -100,7 +104,8 @@ class ConnectionDisco:
             jid is mandatory;
             name, node, action is optional.
         """
-        self._discover(common.xmpp.NS_DISCO_ITEMS, jid, node, id_prefix)
+        id_ = self._discover(nbxmpp.NS_DISCO_ITEMS, jid, node, id_prefix)
+        self.disco_items_ids.append(id_)
 
     def discoverInfo(self, jid, node=None, id_prefix=None):
         """
@@ -108,12 +113,13 @@ class ConnectionDisco:
             For identity: category, type is mandatory, name is optional.
             For feature: var is mandatory.
         """
-        self._discover(common.xmpp.NS_DISCO_INFO, jid, node, id_prefix)
+        id_ = self._discover(nbxmpp.NS_DISCO_INFO, jid, node, id_prefix)
+        self.disco_info_ids.append(id_)
 
     def request_register_agent_info(self, agent):
         if not self.connection or self.connected < 2:
             return None
-        iq = common.xmpp.Iq('get', common.xmpp.NS_REGISTER, to=agent)
+        iq = nbxmpp.Iq('get', nbxmpp.NS_REGISTER, to=agent)
         id_ = self.connection.getAnID()
         iq.setID(id_)
         # Wait the answer during 30 secondes
@@ -131,7 +137,7 @@ class ConnectionDisco:
             self.request_subscription(agent, auto_auth=True)
             self.agent_registrations[agent]['roster_push'] = True
             if self.agent_registrations[agent]['sub_received']:
-                p = common.xmpp.Presence(agent, 'subscribed')
+                p = nbxmpp.Presence(agent, 'subscribed')
                 p = self.add_sha(p)
                 self.connection.send(p)
         if resp.getType() == 'error':
@@ -145,7 +151,7 @@ class ConnectionDisco:
         if not self.connection or self.connected < 2:
             return
         if is_form:
-            iq = common.xmpp.Iq('set', common.xmpp.NS_REGISTER, to=agent)
+            iq = nbxmpp.Iq('set', nbxmpp.NS_REGISTER, to=agent)
             query = iq.setQuery()
             info.setAttr('type', 'submit')
             query.addChild(node=info)
@@ -153,7 +159,7 @@ class ConnectionDisco:
                 self._agent_registered_cb, {'agent': agent})
         else:
             # fixed: blocking
-            common.xmpp.features_nb.register(self.connection, agent, info,
+            nbxmpp.features_nb.register(self.connection, agent, info,
                 self._agent_registered_cb, {'agent': agent})
         self.agent_registrations[agent] = {'roster_push': False,
             'sub_received': False}
@@ -161,16 +167,18 @@ class ConnectionDisco:
     def _discover(self, ns, jid, node=None, id_prefix=None):
         if not self.connection or self.connected < 2:
             return
-        iq = common.xmpp.Iq(typ='get', to=jid, queryNS=ns)
+        iq = nbxmpp.Iq(typ='get', to=jid, queryNS=ns)
+        id_ = self.connection.getAnID()
         if id_prefix:
-            id_ = self.connection.getAnID()
-            iq.setID('%s%s' % (id_prefix, id_))
+            id_ = id_prefix + id_
+        iq.setID(id_)
         if node:
             iq.setQuerynode(node)
         self.connection.send(iq)
+        return id_
 
     def _ReceivedRegInfo(self, con, resp, agent):
-        common.xmpp.features_nb._ReceivedRegInfo(con, resp, agent)
+        nbxmpp.features_nb._ReceivedRegInfo(con, resp, agent)
         self._IqCB(con, resp)
 
     def _discoGetCB(self, con, iq_obj):
@@ -182,20 +190,21 @@ class ConnectionDisco:
         frm = helpers.get_full_jid_from_iq(iq_obj)
         to = unicode(iq_obj.getAttr('to'))
         id_ = unicode(iq_obj.getAttr('id'))
-        iq = common.xmpp.Iq(to=frm, typ='result', queryNS=common.xmpp.NS_DISCO,
-            frm=to)
+        iq = nbxmpp.Iq(to=frm, typ='result', queryNS=nbxmpp.NS_DISCO, frm=to)
         iq.setAttr('id', id_)
         query = iq.setTag('query')
         query.setAttr('node', 'http://gajim.org#' + gajim.version.split('-', 1)[
             0])
-        for f in (common.xmpp.NS_BYTESTREAM, common.xmpp.NS_SI,
-        common.xmpp.NS_FILE, common.xmpp.NS_COMMANDS):
-            feature = common.xmpp.Node('feature')
+        for f in (nbxmpp.NS_BYTESTREAM, nbxmpp.NS_SI, nbxmpp.NS_FILE,
+        nbxmpp.NS_COMMANDS, nbxmpp.NS_JINGLE_FILE_TRANSFER,
+        nbxmpp.NS_JINGLE_XTLS, nbxmpp.NS_PUBKEY_PUBKEY, nbxmpp.NS_PUBKEY_REVOKE,
+        nbxmpp.NS_PUBKEY_ATTEST):
+            feature = nbxmpp.Node('feature')
             feature.setAttr('var', f)
             query.addChild(node=feature)
 
         self.connection.send(iq)
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _DiscoverItemsErrorCB(self, con, iq_obj):
         log.debug('DiscoverItemsErrorCB')
@@ -214,15 +223,15 @@ class ConnectionDisco:
             return
 
         if self.commandItemsQuery(con, iq_obj):
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
         node = iq_obj.getTagAttr('query', 'node')
         if node is None:
             result = iq_obj.buildReply('result')
             self.connection.send(result)
-            raise common.xmpp.NodeProcessed
-        if node == common.xmpp.NS_COMMANDS:
+            raise nbxmpp.NodeProcessed
+        if node == nbxmpp.NS_COMMANDS:
             self.commandListQuery(con, iq_obj)
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
 
     def _DiscoverInfoGetCB(self, con, iq_obj):
         log.debug('DiscoverInfoGetCB')
@@ -231,12 +240,12 @@ class ConnectionDisco:
         node = iq_obj.getQuerynode()
 
         if self.commandInfoQuery(con, iq_obj):
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
 
         id_ = unicode(iq_obj.getAttr('id'))
         if id_[:6] == 'Gajim_':
             # We get this request from echo.server
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
 
         iq = iq_obj.buildReply('result')
         q = iq.setQuery()
@@ -253,7 +262,7 @@ class ConnectionDisco:
 
         if q.getChildren():
             self.connection.send(iq)
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
 
     def _DiscoverInfoErrorCB(self, con, iq_obj):
         log.debug('DiscoverInfoErrorCB')
@@ -275,7 +284,7 @@ class ConnectionVcard:
         self.room_jids = []
 
     def add_sha(self, p, send_caps=True):
-        c = p.setTag('x', namespace=common.xmpp.NS_VCARD_UPDATE)
+        c = p.setTag('x', namespace=nbxmpp.NS_VCARD_UPDATE)
         if self.vcard_sha is not None:
             c.setTagData('photo', self.vcard_sha)
         if send_caps:
@@ -284,7 +293,7 @@ class ConnectionVcard:
 
     def _add_caps(self, p):
         ''' advertise our capabilities in presence stanza (xep-0115)'''
-        c = p.setTag('c', namespace=common.xmpp.NS_CAPS)
+        c = p.setTag('c', namespace=nbxmpp.NS_CAPS)
         c.setAttr('hash', 'sha-1')
         c.setAttr('node', 'http://gajim.org')
         c.setAttr('ver', gajim.caps_hash[self.name])
@@ -353,7 +362,7 @@ class ConnectionVcard:
         c = f.read()
         f.close()
         try:
-            card = common.xmpp.Node(node=c)
+            card = nbxmpp.Node(node=c)
         except Exception:
             # We are unable to parse it. Remove it
             os.remove(path_to_file)
@@ -382,10 +391,10 @@ class ConnectionVcard:
         """
         if not self.connection or self.connected < 2:
             return
-        iq = common.xmpp.Iq(typ='get')
+        iq = nbxmpp.Iq(typ='get')
         if jid:
             iq.setTo(jid)
-        iq.setQuery('vCard').setNamespace(common.xmpp.NS_VCARD)
+        iq.setQuery('vCard').setNamespace(nbxmpp.NS_VCARD)
 
         id_ = self.connection.getAnID()
         iq.setID(id_)
@@ -403,8 +412,8 @@ class ConnectionVcard:
     def send_vcard(self, vcard):
         if not self.connection or self.connected < 2:
             return
-        iq = common.xmpp.Iq(typ='set')
-        iq2 = iq.setTag(common.xmpp.NS_VCARD + ' vCard')
+        iq = nbxmpp.Iq(typ='set')
+        iq2 = iq.setTag(nbxmpp.NS_VCARD + ' vCard')
         for i in vcard:
             if i == 'jid':
                 continue
@@ -477,7 +486,7 @@ class ConnectionVcard:
                     self.vcard_sha = new_sha
                     sshow = helpers.get_xmpp_show(gajim.SHOW_LIST[
                         self.connected])
-                    p = common.xmpp.Presence(typ=None, priority=self.priority,
+                    p = nbxmpp.Presence(typ=None, priority=self.priority,
                         show=sshow, status=self.status)
                     p = self.add_sha(p)
                     self.connection.send(p)
@@ -556,12 +565,23 @@ class ConnectionVcard:
                     self.discover_ft_proxies()
                 gajim.nec.push_incoming_event(RosterReceivedEvent(None,
                     conn=self))
+            gobject.timeout_add_seconds(10, self.discover_servers)
         elif self.awaiting_answers[id_][0] == PRIVACY_ARRIVED:
             if iq_obj.getType() != 'error':
                 self.privacy_rules_supported = True
                 self.get_privacy_list('block')
-            elif self.continue_connect_info:
-                if self.continue_connect_info[0] == 'invisible':
+            else:
+                if self.blocking_supported:
+                    iq = nbxmpp.Iq('get', xmlns='')
+                    query = iq.setQuery(name='blocklist')
+                    query.setNamespace(nbxmpp.NS_BLOCKING)
+                    id2_ = self.connection.getAnID()
+                    iq.setID(id2_)
+                    self.awaiting_answers[id2_] = (BLOCKING_ARRIVED, )
+                    self.connection.send(iq)
+
+                if self.continue_connect_info and self.continue_connect_info[0]\
+                == 'invisible':
                     # Trying to login as invisible but privacy list not
                     # supported
                     self.disconnect(on_purpose=True)
@@ -574,6 +594,14 @@ class ConnectionVcard:
                     return
             # Ask metacontacts before roster
             self.get_metacontacts()
+        elif self.awaiting_answers[id_][0] == BLOCKING_ARRIVED:
+            if iq_obj.getType() == 'result':
+                list_node = iq_obj.getTag('blocklist')
+                if not list_node:
+                    return
+                self.blocked_contacts = []
+                for i in list_node.iterTags('item'):
+                    self.blocked_contacts.append(i.getAttr('jid'))
         elif self.awaiting_answers[id_][0] == PEP_CONFIG:
             if iq_obj.getType() == 'error':
                 return
@@ -583,7 +611,7 @@ class ConnectionVcard:
             if not conf:
                 return
             node = conf.getAttr('node')
-            form_tag = conf.getTag('x', namespace=common.xmpp.NS_DATA)
+            form_tag = conf.getTag('x', namespace=nbxmpp.NS_DATA)
             if form_tag:
                 form = common.dataforms.ExtendForm(node=form_tag)
                 gajim.nec.push_incoming_event(PEPConfigReceivedEvent(None,
@@ -660,7 +688,7 @@ class ConnectionVcard:
         """
         if not vc.getTag('vCard'):
             return
-        if not vc.getTag('vCard').getNamespace() == common.xmpp.NS_VCARD:
+        if not vc.getTag('vCard').getNamespace() == nbxmpp.NS_VCARD:
             return
         id_ = vc.getID()
         frm_iq = vc.getFrom()
@@ -741,10 +769,176 @@ class ConnectionVcard:
             if not self.connection:
                 return
             sshow = helpers.get_xmpp_show(gajim.SHOW_LIST[self.connected])
-            p = common.xmpp.Presence(typ=None, priority=self.priority,
+            p = nbxmpp.Presence(typ=None, priority=self.priority,
                 show=sshow, status=self.status)
             p = self.add_sha(p)
             self.connection.send(p)
+
+
+class ConnectionPEP(object):
+
+    def __init__(self, account, dispatcher, pubsub_connection):
+        self._account = account
+        self._dispatcher = dispatcher
+        self._pubsub_connection = pubsub_connection
+        self.reset_awaiting_pep()
+
+    def pep_change_account_name(self, new_name):
+        self._account = new_name
+
+    def reset_awaiting_pep(self):
+        self.to_be_sent_activity = None
+        self.to_be_sent_mood = None
+        self.to_be_sent_tune = None
+        self.to_be_sent_nick = None
+        self.to_be_sent_location = None
+
+    def send_awaiting_pep(self):
+        """
+        Send pep info that were waiting for connection
+        """
+        if self.to_be_sent_activity:
+            self.send_activity(*self.to_be_sent_activity)
+        if self.to_be_sent_mood:
+            self.send_mood(*self.to_be_sent_mood)
+        if self.to_be_sent_tune:
+            self.send_tune(*self.to_be_sent_tune)
+        if self.to_be_sent_nick:
+            self.send_nick(self.to_be_sent_nick)
+        if self.to_be_sent_location:
+            self.send_location(self.to_be_sent_location)
+        self.reset_awaiting_pep()
+
+    def _pubsubEventCB(self, xmpp_dispatcher, msg):
+        ''' Called when we receive <message /> with pubsub event. '''
+        gajim.nec.push_incoming_event(PEPReceivedEvent(None, conn=self,
+            stanza=msg))
+
+    def send_activity(self, activity, subactivity=None, message=None):
+        if self.connected == 1:
+            # We are connecting, keep activity in mem and send it when we'll be
+            # connected
+            self.to_be_sent_activity = (activity, subactivity, message)
+            return
+        if not self.pep_supported:
+            return
+        item = nbxmpp.Node('activity', {'xmlns': nbxmpp.NS_ACTIVITY})
+        if activity:
+            i = item.addChild(activity)
+        if subactivity:
+            i.addChild(subactivity)
+        if message:
+            i = item.addChild('text')
+            i.addData(message)
+        self._pubsub_connection.send_pb_publish('', nbxmpp.NS_ACTIVITY, item,
+            '0')
+
+    def retract_activity(self):
+        if not self.pep_supported:
+            return
+        self.send_activity(None)
+        # not all client support new XEP, so we still retract
+        self._pubsub_connection.send_pb_retract('', nbxmpp.NS_ACTIVITY, '0')
+
+    def send_mood(self, mood, message=None):
+        if self.connected == 1:
+            # We are connecting, keep mood in mem and send it when we'll be
+            # connected
+            self.to_be_sent_mood = (mood, message)
+            return
+        if not self.pep_supported:
+            return
+        item = nbxmpp.Node('mood', {'xmlns': nbxmpp.NS_MOOD})
+        if mood:
+            item.addChild(mood)
+        if message:
+            i = item.addChild('text')
+            i.addData(message)
+        self._pubsub_connection.send_pb_publish('', nbxmpp.NS_MOOD, item, '0')
+
+    def retract_mood(self):
+        if not self.pep_supported:
+            return
+        self.send_mood(None)
+        # not all client support new XEP, so we still retract
+        self._pubsub_connection.send_pb_retract('', nbxmpp.NS_MOOD, '0')
+
+    def send_tune(self, artist='', title='', source='', track=0, length=0,
+    items=None):
+        if self.connected == 1:
+            # We are connecting, keep tune in mem and send it when we'll be
+            # connected
+            self.to_be_sent_tune = (artist, title, source, track, length, items)
+            return
+        if not self.pep_supported:
+            return
+        item = nbxmpp.Node('tune', {'xmlns': nbxmpp.NS_TUNE})
+        if artist:
+            i = item.addChild('artist')
+            i.addData(artist)
+        if title:
+            i = item.addChild('title')
+            i.addData(title)
+        if source:
+            i = item.addChild('source')
+            i.addData(source)
+        if track:
+            i = item.addChild('track')
+            i.addData(track)
+        if length:
+            i = item.addChild('length')
+            i.addData(length)
+        if items:
+            item.addChild(payload=items)
+        self._pubsub_connection.send_pb_publish('', nbxmpp.NS_TUNE, item, '0')
+
+    def retract_tune(self):
+        if not self.pep_supported:
+            return
+        self.send_tune(None)
+        # not all client support new XEP, so we still retract
+        self._pubsub_connection.send_pb_retract('', nbxmpp.NS_TUNE, '0')
+
+    def send_nickname(self, nick):
+        if self.connected == 1:
+            # We are connecting, keep nick in mem and send it when we'll be
+            # connected
+            self.to_be_sent_nick = nick
+            return
+        if not self.pep_supported:
+            return
+        item = nbxmpp.Node('nick', {'xmlns': nbxmpp.NS_NICK})
+        item.addData(nick)
+        self._pubsub_connection.send_pb_publish('', nbxmpp.NS_NICK, item, '0')
+
+    def retract_nickname(self):
+        if not self.pep_supported:
+            return
+        self.send_nickname(None)
+        # not all client support new XEP, so we still retract
+        self._pubsub_connection.send_pb_retract('', nbxmpp.NS_NICK, '0')
+
+    def send_location(self, info):
+        if self.connected == 1:
+            # We are connecting, keep location in mem and send it when we'll be
+            # connected
+            self.to_be_sent_location = info
+            return
+        if not self.pep_supported:
+            return
+        item = nbxmpp.Node('geoloc', {'xmlns': nbxmpp.NS_LOCATION})
+        for field in LOCATION_DATA:
+            if info.get(field, None):
+                i = item.addChild(field)
+                i.addData(info[field])
+        self._pubsub_connection.send_pb_publish('', nbxmpp.NS_LOCATION, item, '0')
+
+    def retract_location(self):
+        if not self.pep_supported:
+            return
+        self.send_location({})
+        # not all client support new XEP, so we still retract
+        self._pubsub_connection.send_pb_retract('', nbxmpp.NS_LOCATION, '0')
 
 # basic connection handlers used here and in zeroconf
 class ConnectionHandlersBase:
@@ -917,8 +1111,7 @@ class ConnectionHandlersBase:
         # reset chatstate if needed:
         # (when contact signs out or has errors)
         if obj.show in ('offline', 'error'):
-            obj.contact.our_chatstate = obj.contact.chatstate = \
-                obj.contact.composing_xep = None
+            obj.contact.our_chatstate = obj.contact.chatstate = None
 
             # TODO: This causes problems when another
             # resource signs off!
@@ -969,7 +1162,8 @@ class ConnectionHandlersBase:
         decmsg = self.gpg.decrypt(encmsg, keyID)
         decmsg = self.connection.Dispatcher.replace_non_character(decmsg)
         # \x00 chars are not allowed in C (so in GTK)
-        obj.msgtxt = helpers.decode_string(decmsg.replace('\x00', ''))
+        obj.msgtxt = decmsg.replace('\x00', '').encode(
+            locale.getpreferredencoding()).decode('utf-8')
         obj.encrypted = 'xep27'
         self.gpg_messages_to_decrypt.remove([encmsg, keyID, obj])
 
@@ -1017,8 +1211,9 @@ class ConnectionHandlersBase:
         gc_contact = gajim.contacts.get_gc_contact(self.name, obj.jid, nick)
         if obj.receipt_request_tag and gajim.config.get_per('accounts',
         self.name, 'answer_receipts') and ((contact and contact.sub \
-        not in (u'to', u'none')) or gc_contact) and obj.mtype != 'error':
-            receipt = common.xmpp.Message(to=obj.fjid, typ='chat')
+        not in (u'to', u'none')) or gc_contact) and obj.mtype != 'error' and \
+        not obj.forwarded:
+            receipt = nbxmpp.Message(to=obj.fjid, typ='chat')
             receipt.setID(obj.id_)
             receipt.setTag('received', namespace='urn:xmpp:receipts',
                 attrs={'id': obj.id_})
@@ -1038,16 +1233,20 @@ class ConnectionHandlersBase:
 
         if obj.mtype == 'error':
             if not obj.msgtxt:
-                return True
+                obj.msgtxt = _('message')
             self.dispatch_error_message(obj.stanza, obj.msgtxt,
                 obj.session, obj.fjid, obj.timestamp)
             return True
-        elif obj.mtype == 'groupchat':
-            gajim.nec.push_incoming_event(GcMessageReceivedEvent(None,
-                conn=self, msg_obj=obj))
-            return True
         elif obj.invite_tag is not None:
             gajim.nec.push_incoming_event(GcInvitationReceivedEvent(None,
+                conn=self, msg_obj=obj))
+            return True
+        elif obj.decline_tag is not None:
+            gajim.nec.push_incoming_event(GcDeclineReceivedEvent(None,
+                conn=self, msg_obj=obj))
+            return True
+        elif obj.mtype == 'groupchat':
+            gajim.nec.push_incoming_event(GcMessageReceivedEvent(None,
                 conn=self, msg_obj=obj))
             return True
 
@@ -1169,6 +1368,17 @@ class ConnectionHandlersBase:
         else:
             return None
 
+    def get_latest_session(self, jid):
+        """
+        Get the session that we last sent a message to
+        """
+        if jid not in self.sessions:
+            return None
+        sessions = self.sessions[jid].values()
+        if not sessions:
+            return None
+        return sorted(sessions, key=operator.attrgetter('last_send'))[-1]
+
     def find_controlless_session(self, jid, resource=None):
         """
         Find an active session that doesn't have a control attached
@@ -1199,7 +1409,7 @@ class ConnectionHandlersBase:
         if not cls:
             cls = gajim.default_session_type
 
-        sess = cls(self, common.xmpp.JID(jid), thread_id, type_)
+        sess = cls(self, nbxmpp.JID(jid), thread_id, type_)
 
         # determine if this session is a pm session
         # if not, discard the resource so that all sessions are stored bare
@@ -1232,7 +1442,7 @@ ConnectionJingle, ConnectionIBBytestream):
         gajim.nec.register_incoming_event(PresenceReceivedEvent)
 
         ConnectionCaps.__init__(self, account=self.name,
-            dispatch_event=self.dispatch, capscache=capscache.capscache,
+            capscache=capscache.capscache,
             client_caps_factory=capscache.create_suitable_client_caps)
         ConnectionJingle.__init__(self)
         ConnectionHandlersBase.__init__(self)
@@ -1245,6 +1455,10 @@ ConnectionJingle, ConnectionIBBytestream):
         self.version_ids = []
         # IDs of urn:xmpp:time requests
         self.entity_time_ids = []
+        # IDs of disco#items requests
+        self.disco_items_ids = []
+        # IDs of disco#info requests
+        self.disco_info_ids = []
         # ID of urn:xmpp:ping requests
         self.awaiting_xmpp_ping_id = None
         self.continue_connect_info = None
@@ -1309,6 +1523,8 @@ ConnectionJingle, ConnectionIBBytestream):
             self._nec_agent_removed)
         gajim.ged.register_event_handler('stream-other-host-received', ged.CORE,
             self._nec_stream_other_host_received)
+        gajim.ged.register_event_handler('blocking', ged.CORE,
+            self._nec_blocking)
 
     def cleanup(self):
         ConnectionHandlersBase.cleanup(self)
@@ -1353,6 +1569,7 @@ ConnectionJingle, ConnectionIBBytestream):
             self._nec_agent_removed)
         gajim.ged.remove_event_handler('stream-other-host-received', ged.CORE,
             self._nec_stream_other_host_received)
+        gajim.ged.remove_event_handler('blocking', ged.CORE, self._nec_blocking)
 
     def build_http_auth_answer(self, iq_obj, answer):
         if not self.connection or self.connected < 2:
@@ -1364,8 +1581,7 @@ ConnectionJingle, ConnectionIBBytestream):
                 reply.addChild(node=confirm)
             self.connection.send(reply)
         elif answer == 'no':
-            err = common.xmpp.Error(iq_obj,
-                common.xmpp.protocol.ERR_NOT_AUTHORIZED)
+            err = nbxmpp.Error(iq_obj, nbxmpp.protocol.ERR_NOT_AUTHORIZED)
             self.connection.send(err)
 
     def _nec_http_auth_received(self, obj):
@@ -1379,7 +1595,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('HttpAuthCB')
         gajim.nec.push_incoming_event(HttpAuthReceivedEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _ErrorCB(self, con, iq_obj):
         log.debug('ErrorCB')
@@ -1395,6 +1611,14 @@ ConnectionJingle, ConnectionIBBytestream):
             return True
         if obj.id_ in self.entity_time_ids:
             gajim.nec.push_incoming_event(TimeResultReceivedEvent(None,
+                conn=self, stanza=obj.stanza))
+            return True
+        if obj.id_ in self.disco_items_ids:
+            gajim.nec.push_incoming_event(AgentItemsErrorReceivedEvent(None,
+                conn=self, stanza=obj.stanza))
+            return True
+        if obj.id_ in self.disco_info_ids:
+            gajim.nec.push_incoming_event(AgentInfoErrorReceivedEvent(None,
                 conn=self, stanza=obj.stanza))
             return True
 
@@ -1460,7 +1684,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('rosterSetCB')
         gajim.nec.push_incoming_event(RosterSetReceivedEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_roster_set_received(self, obj):
         if obj.conn.name != self.name:
@@ -1483,7 +1707,7 @@ ConnectionJingle, ConnectionIBBytestream):
             return
         gajim.nec.push_incoming_event(VersionRequestEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_version_request_received(self, obj):
         if obj.conn.name != self.name:
@@ -1497,7 +1721,7 @@ ConnectionJingle, ConnectionIBBytestream):
             qp.setTagData('os', helpers.get_os_info())
         else:
             iq_obj = obj.stanza.buildReply('error')
-            err = common.xmpp.ErrorNode(name=common.xmpp.NS_STANZAS + \
+            err = nbxmpp.ErrorNode(name=nbxmpp.NS_STANZAS + \
                 ' service-unavailable')
             iq_obj.addChild(node=err)
         self.connection.send(iq_obj)
@@ -1508,7 +1732,7 @@ ConnectionJingle, ConnectionIBBytestream):
             return
         gajim.nec.push_incoming_event(LastRequestEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_last_request_received(self, obj):
         global HAS_IDLE
@@ -1521,7 +1745,7 @@ ConnectionJingle, ConnectionIBBytestream):
             qp.attrs['seconds'] = int(self.sleeper.getIdleSec())
         else:
             iq_obj = obj.stanza.buildReply('error')
-            err = common.xmpp.ErrorNode(name=common.xmpp.NS_STANZAS + \
+            err = nbxmpp.ErrorNode(name=nbxmpp.NS_STANZAS + \
                 ' service-unavailable')
             iq_obj.addChild(node=err)
         self.connection.send(iq_obj)
@@ -1537,7 +1761,7 @@ ConnectionJingle, ConnectionIBBytestream):
             return
         gajim.nec.push_incoming_event(TimeRequestEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_time_request_received(self, obj):
         if obj.conn.name != self.name:
@@ -1551,7 +1775,7 @@ ConnectionJingle, ConnectionIBBytestream):
                 localtime())))
         else:
             iq_obj = obj.stanza.buildReply('error')
-            err = common.xmpp.ErrorNode(name=common.xmpp.NS_STANZAS + \
+            err = nbxmpp.ErrorNode(name=nbxmpp.NS_STANZAS + \
                 ' service-unavailable')
             iq_obj.addChild(node=err)
         self.connection.send(iq_obj)
@@ -1562,14 +1786,14 @@ ConnectionJingle, ConnectionIBBytestream):
             return
         gajim.nec.push_incoming_event(TimeRevisedRequestEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_time_revised_request_received(self, obj):
         if obj.conn.name != self.name:
             return
         if gajim.config.get_per('accounts', self.name, 'send_time_info'):
             iq_obj = obj.stanza.buildReply('result')
-            qp = iq_obj.setTag('time', namespace=common.xmpp.NS_TIME_REVISED)
+            qp = iq_obj.setTag('time', namespace=nbxmpp.NS_TIME_REVISED)
             qp.setTagData('utc', strftime('%Y-%m-%dT%H:%M:%SZ', gmtime()))
             isdst = localtime().tm_isdst
             zone = -(timezone, altzone)[isdst] / 60.0
@@ -1577,7 +1801,7 @@ ConnectionJingle, ConnectionIBBytestream):
             qp.setTagData('tzo', '%+03d:%02d' % (tzo))
         else:
             iq_obj = obj.stanza.buildReply('error')
-            err = common.xmpp.ErrorNode(name=common.xmpp.NS_STANZAS + \
+            err = nbxmpp.ErrorNode(name=nbxmpp.NS_STANZAS + \
                 ' service-unavailable')
             iq_obj.addChild(node=err)
         self.connection.send(iq_obj)
@@ -1594,7 +1818,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('gMailNewMailCB')
         gajim.nec.push_incoming_event(GmailNewMailReceivedEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_gmail_new_mail_received(self, obj):
         if obj.conn.name != self.name:
@@ -1605,9 +1829,9 @@ ConnectionJingle, ConnectionIBBytestream):
         jid = gajim.get_jid_from_account(self.name)
         log.debug('Got notification of new gmail e-mail on %s. Asking the '
             'server for more info.' % jid)
-        iq = common.xmpp.Iq(typ='get')
+        iq = nbxmpp.Iq(typ='get')
         query = iq.setTag('query')
-        query.setNamespace(common.xmpp.NS_GMAILNOTIFY)
+        query.setNamespace(nbxmpp.NS_GMAILNOTIFY)
         # we want only be notified about newer mails
         if self.gmail_last_tid:
             query.setAttr('newer-than-tid', self.gmail_last_tid)
@@ -1623,7 +1847,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('gMailQueryCB')
         gajim.nec.push_incoming_event(GMailQueryReceivedEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _rosterItemExchangeCB(self, con, msg):
         """
@@ -1632,7 +1856,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('rosterItemExchangeCB')
         gajim.nec.push_incoming_event(RosterItemExchangeEvent(None, conn=self,
             stanza=msg))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _messageCB(self, con, msg):
         """
@@ -1656,7 +1880,7 @@ ConnectionJingle, ConnectionIBBytestream):
             return
 
         if result.getType() == 'result':
-            data = msg.getTags('data', namespace=common.xmpp.NS_BOB)
+            data = msg.getTags('data', namespace=nbxmpp.NS_BOB)
             if data.getAttr('cid') == cid:
                 for func in self.awaiting_cids[cid]:
                     cb = func[0]
@@ -1691,9 +1915,9 @@ ConnectionJingle, ConnectionIBBytestream):
             self.awaiting_cids[cid].appends((callback, args, position))
         else:
             self.awaiting_cids[cid] = [(callback, args, position)]
-        iq = common.xmpp.Iq(to=to, typ='get')
+        iq = nbxmpp.Iq(to=to, typ='get')
         data = iq.addChild(name='data', attrs={'cid': cid},
-            namespace=common.xmpp.NS_BOB)
+            namespace=nbxmpp.NS_BOB)
         self.connection.SendAndCallForResponse(iq, self._on_bob_received,
             {'cid': cid})
 
@@ -1719,7 +1943,7 @@ ConnectionJingle, ConnectionIBBytestream):
         gajim.jid_is_transport(obj.fjid) or obj.jid in self.jids_for_auto_auth \
         or obj.transport_auto_auth:
             if self.connection:
-                p = xmpp.Presence(obj.fjid, 'subscribed')
+                p = nbxmpp.Presence(obj.fjid, 'subscribed')
                 p = self.add_sha(p)
                 self.connection.send(p)
             if gajim.jid_is_transport(obj.fjid) or obj.transport_auto_auth:
@@ -1822,7 +2046,7 @@ ConnectionJingle, ConnectionIBBytestream):
         log.debug('IqPingCB')
         gajim.nec.push_incoming_event(PingReceivedEvent(None, conn=self,
             stanza=iq_obj))
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _nec_ping_received(self, obj):
         if obj.conn.name != self.name:
@@ -1849,7 +2073,7 @@ ConnectionJingle, ConnectionIBBytestream):
         if q:
             result.delChild(q)
         self.connection.send(result)
-        raise common.xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _getRoster(self):
         log.debug('getRosterCB')
@@ -1873,6 +2097,17 @@ ConnectionJingle, ConnectionIBBytestream):
             for proxy in proxies:
                 gajim.proxy65_manager.resolve(proxy, self.connection, our_jid,
                     testit=testit)
+
+    def discover_servers(self):
+        if not self.connection:
+            return
+        servers = []
+        for c in gajim.contacts.iter_contacts(self.name):
+            s = gajim.get_server_from_jid(c.jid)
+            if s not in servers and s not in gajim.transport_type:
+                servers.append(s)
+        for s in servers:
+            self.discoverInfo(s)
 
     def _on_roster_set(self, roster):
         gajim.nec.push_incoming_event(RosterReceivedEvent(None, conn=self,
@@ -1944,12 +2179,12 @@ ConnectionJingle, ConnectionIBBytestream):
         vcard = self.get_cached_vcard(our_jid)
         if vcard and 'PHOTO' in vcard and 'SHA' in vcard['PHOTO']:
             self.vcard_sha = vcard['PHOTO']['SHA']
-        p = common.xmpp.Presence(typ=None, priority=priority, show=sshow)
+        p = nbxmpp.Presence(typ=None, priority=priority, show=sshow)
         p = self.add_sha(p)
         if msg:
             p.setStatus(msg)
         if signed:
-            p.setTag(common.xmpp.NS_SIGNED + ' x').setData(signed)
+            p.setTag(nbxmpp.NS_SIGNED + ' x').setData(signed)
 
         if self.connection:
             self.connection.send(p)
@@ -1979,18 +2214,18 @@ ConnectionJingle, ConnectionIBBytestream):
         our_jid = helpers.parse_jid(gajim.get_jid_from_account(self.name))
         log.debug(('%s is a gmail account. Setting option '
             'to get e-mail notifications on the server.') % (our_jid))
-        iq = common.xmpp.Iq(typ='set', to=our_jid)
+        iq = nbxmpp.Iq(typ='set', to=our_jid)
         iq.setAttr('id', 'MailNotify')
         query = iq.setTag('usersetting')
-        query.setNamespace(common.xmpp.NS_GTALKSETTING)
+        query.setNamespace(nbxmpp.NS_GTALKSETTING)
         query = query.setTag('mailnotifications')
         query.setAttr('value', 'true')
         self.connection.send(iq)
         # Ask how many messages there are now
-        iq = common.xmpp.Iq(typ='get')
+        iq = nbxmpp.Iq(typ='get')
         iq.setID(self.connection.getAnID())
         query = iq.setTag('query')
-        query.setNamespace(common.xmpp.NS_GMAILNOTIFY)
+        query.setNamespace(nbxmpp.NS_GMAILNOTIFY)
         self.connection.send(iq)
 
     def _SearchCB(self, con, iq_obj):
@@ -1998,12 +2233,58 @@ ConnectionJingle, ConnectionIBBytestream):
         gajim.nec.push_incoming_event(SearchFormReceivedEvent(None,
             conn=self, stanza=iq_obj))
 
+    def _search_fields_received(self, con, iq_obj):
+        jid = jid = helpers.get_jid_from_iq(iq_obj)
+        tag = iq_obj.getTag('query', namespace = nbxmpp.NS_SEARCH)
+        if not tag:
+            self.dispatch('SEARCH_FORM', (jid, None, False))
+            return
+        df = tag.getTag('x', namespace=nbxmpp.NS_DATA)
+        if df:
+            self.dispatch('SEARCH_FORM', (jid, df, True))
+            return
+        df = {}
+        for i in iq_obj.getQueryPayload():
+            df[i.getName()] = i.getData()
+        self.dispatch('SEARCH_FORM', (jid, df, False))
+
+    def _PubkeyGetCB(self, con, iq_obj):
+        log.info('PubkeyGetCB')
+        jid_from = helpers.get_full_jid_from_iq(iq_obj)
+        sid = iq_obj.getAttr('id')
+        jingle_xtls.send_cert(con, jid_from, sid)
+        raise nbxmpp.NodeProcessed
+
+    def _PubkeyResultCB(self, con, iq_obj):
+        log.info('PubkeyResultCB')
+        jid_from = helpers.get_full_jid_from_iq(iq_obj)
+        jingle_xtls.handle_new_cert(con, iq_obj, jid_from)
+
+    def _BlockingSetCB(self, con, iq_obj):
+        log.debug('_BlockingSetCB')
+        gajim.nec.push_incoming_event(BlockingEvent(None, conn=self,
+            stanza=iq_obj))
+        raise nbxmpp.NodeProcessed
+
+    def _nec_blocking(self, obj):
+        if obj.conn.name != self.name:
+            return
+        if obj.unblock_all:
+            self.blocked_contacts = []
+        else:
+            for jid in obj.blocked_jids:
+                if jid not in self.blocked_contacts:
+                    self.blocked_contacts.append(jid)
+            for jid in obj.unblocked_jids:
+                if jid in self.blocked_contacts:
+                    self.blocked_contacts.remove(jid)
+
     def _nec_stream_other_host_received(self, obj):
         if obj.conn.name != self.name:
             return
         self.redirected = obj.redirected
 
-    def _StreamCB(self, con, iq_obj):
+    def _StreamCB(self, con, obj):
         log.debug('StreamCB')
         gajim.nec.push_incoming_event(StreamReceivedEvent(None,
             conn=self, stanza=obj))
@@ -2018,76 +2299,68 @@ ConnectionJingle, ConnectionIBBytestream):
         # We also don't check for namespace, else it cannot stop _messageCB to
         # be called
         con.RegisterHandler('message', self._pubsubEventCB, makefirst=True)
-        con.RegisterHandler('iq', self._vCardCB, 'result', common.xmpp.NS_VCARD)
-        con.RegisterHandler('iq', self._rosterSetCB, 'set',
-            common.xmpp.NS_ROSTER)
-        con.RegisterHandler('iq', self._siSetCB, 'set', common.xmpp.NS_SI)
+        con.RegisterHandler('iq', self._vCardCB, 'result', nbxmpp.NS_VCARD)
+        con.RegisterHandler('iq', self._rosterSetCB, 'set', nbxmpp.NS_ROSTER)
+        con.RegisterHandler('iq', self._siSetCB, 'set', nbxmpp.NS_SI)
         con.RegisterHandler('iq', self._rosterItemExchangeCB, 'set',
-            common.xmpp.NS_ROSTERX)
-        con.RegisterHandler('iq', self._siErrorCB, 'error', common.xmpp.NS_SI)
-        con.RegisterHandler('iq', self._siResultCB, 'result', common.xmpp.NS_SI)
-        con.RegisterHandler('iq', self._discoGetCB, 'get', common.xmpp.NS_DISCO)
+            nbxmpp.NS_ROSTERX)
+        con.RegisterHandler('iq', self._siErrorCB, 'error', nbxmpp.NS_SI)
+        con.RegisterHandler('iq', self._siResultCB, 'result', nbxmpp.NS_SI)
+        con.RegisterHandler('iq', self._discoGetCB, 'get', nbxmpp.NS_DISCO)
         con.RegisterHandler('iq', self._bytestreamSetCB, 'set',
-            common.xmpp.NS_BYTESTREAM)
+            nbxmpp.NS_BYTESTREAM)
         con.RegisterHandler('iq', self._bytestreamResultCB, 'result',
-            common.xmpp.NS_BYTESTREAM)
+            nbxmpp.NS_BYTESTREAM)
         con.RegisterHandler('iq', self._bytestreamErrorCB, 'error',
-            common.xmpp.NS_BYTESTREAM)
+            nbxmpp.NS_BYTESTREAM)
         con.RegisterHandlerOnce('iq', self.IBBAllIqHandler)
-        con.RegisterHandler('iq', self.IBBIqHandler, ns=common.xmpp.NS_IBB)
-        con.RegisterHandler('message', self.IBBMessageHandler,
-            ns=common.xmpp.NS_IBB)
+        con.RegisterHandler('iq', self.IBBIqHandler, ns=nbxmpp.NS_IBB)
+        con.RegisterHandler('message', self.IBBMessageHandler, ns=nbxmpp.NS_IBB)
         con.RegisterHandler('iq', self._DiscoverItemsCB, 'result',
-            common.xmpp.NS_DISCO_ITEMS)
+            nbxmpp.NS_DISCO_ITEMS)
         con.RegisterHandler('iq', self._DiscoverItemsErrorCB, 'error',
-            common.xmpp.NS_DISCO_ITEMS)
+            nbxmpp.NS_DISCO_ITEMS)
         con.RegisterHandler('iq', self._DiscoverInfoCB, 'result',
-            common.xmpp.NS_DISCO_INFO)
+            nbxmpp.NS_DISCO_INFO)
         con.RegisterHandler('iq', self._DiscoverInfoErrorCB, 'error',
-            common.xmpp.NS_DISCO_INFO)
-        con.RegisterHandler('iq', self._VersionCB, 'get',
-            common.xmpp.NS_VERSION)
-        con.RegisterHandler('iq', self._TimeCB, 'get', common.xmpp.NS_TIME)
+            nbxmpp.NS_DISCO_INFO)
+        con.RegisterHandler('iq', self._VersionCB, 'get', nbxmpp.NS_VERSION)
+        con.RegisterHandler('iq', self._TimeCB, 'get', nbxmpp.NS_TIME)
         con.RegisterHandler('iq', self._TimeRevisedCB, 'get',
-            common.xmpp.NS_TIME_REVISED)
-        con.RegisterHandler('iq', self._LastCB, 'get', common.xmpp.NS_LAST)
-        con.RegisterHandler('iq', self._LastResultCB, 'result',
-            common.xmpp.NS_LAST)
+            nbxmpp.NS_TIME_REVISED)
+        con.RegisterHandler('iq', self._LastCB, 'get', nbxmpp.NS_LAST)
+        con.RegisterHandler('iq', self._LastResultCB, 'result', nbxmpp.NS_LAST)
         con.RegisterHandler('iq', self._VersionResultCB, 'result',
-            common.xmpp.NS_VERSION)
+            nbxmpp.NS_VERSION)
         con.RegisterHandler('iq', self._TimeRevisedResultCB, 'result',
-            common.xmpp.NS_TIME_REVISED)
+            nbxmpp.NS_TIME_REVISED)
         con.RegisterHandler('iq', self._MucOwnerCB, 'result',
-            common.xmpp.NS_MUC_OWNER)
+            nbxmpp.NS_MUC_OWNER)
         con.RegisterHandler('iq', self._MucAdminCB, 'result',
-            common.xmpp.NS_MUC_ADMIN)
-        con.RegisterHandler('iq', self._PrivateCB, 'result',
-            common.xmpp.NS_PRIVATE)
+            nbxmpp.NS_MUC_ADMIN)
+        con.RegisterHandler('iq', self._PrivateCB, 'result', nbxmpp.NS_PRIVATE)
         con.RegisterHandler('iq', self._SecLabelCB, 'result',
-            common.xmpp.NS_SECLABEL_CATALOG)
-        con.RegisterHandler('iq', self._HttpAuthCB, 'get',
-            common.xmpp.NS_HTTP_AUTH)
+            nbxmpp.NS_SECLABEL_CATALOG)
+        con.RegisterHandler('iq', self._HttpAuthCB, 'get', nbxmpp.NS_HTTP_AUTH)
         con.RegisterHandler('iq', self._CommandExecuteCB, 'set',
-            common.xmpp.NS_COMMANDS)
+            nbxmpp.NS_COMMANDS)
         con.RegisterHandler('iq', self._gMailNewMailCB, 'set',
-            common.xmpp.NS_GMAILNOTIFY)
+            nbxmpp.NS_GMAILNOTIFY)
         con.RegisterHandler('iq', self._gMailQueryCB, 'result',
-            common.xmpp.NS_GMAILNOTIFY)
+            nbxmpp.NS_GMAILNOTIFY)
         con.RegisterHandler('iq', self._DiscoverInfoGetCB, 'get',
-            common.xmpp.NS_DISCO_INFO)
+            nbxmpp.NS_DISCO_INFO)
         con.RegisterHandler('iq', self._DiscoverItemsGetCB, 'get',
-            common.xmpp.NS_DISCO_ITEMS)
-        con.RegisterHandler('iq', self._IqPingCB, 'get', common.xmpp.NS_PING)
-        con.RegisterHandler('iq', self._SearchCB, 'result',
-            common.xmpp.NS_SEARCH)
-        con.RegisterHandler('iq', self._PrivacySetCB, 'set',
-            common.xmpp.NS_PRIVACY)
-        con.RegisterHandler('iq', self._ArchiveCB, ns=common.xmpp.NS_ARCHIVE)
+            nbxmpp.NS_DISCO_ITEMS)
+        con.RegisterHandler('iq', self._IqPingCB, 'get', nbxmpp.NS_PING)
+        con.RegisterHandler('iq', self._SearchCB, 'result', nbxmpp.NS_SEARCH)
+        con.RegisterHandler('iq', self._PrivacySetCB, 'set', nbxmpp.NS_PRIVACY)
+        con.RegisterHandler('iq', self._ArchiveCB, ns=nbxmpp.NS_ARCHIVE)
         con.RegisterHandler('iq', self._PubSubCB, 'result')
         con.RegisterHandler('iq', self._PubSubErrorCB, 'error')
         con.RegisterHandler('iq', self._JingleCB, 'result')
         con.RegisterHandler('iq', self._JingleCB, 'error')
-        con.RegisterHandler('iq', self._JingleCB, 'set', common.xmpp.NS_JINGLE)
+        con.RegisterHandler('iq', self._JingleCB, 'set', nbxmpp.NS_JINGLE)
         con.RegisterHandler('iq', self._ErrorCB, 'error')
         con.RegisterHandler('iq', self._IqCB)
         con.RegisterHandler('iq', self._StanzaArrivedCB)
@@ -2095,4 +2368,10 @@ ConnectionJingle, ConnectionIBBytestream):
         con.RegisterHandler('presence', self._StanzaArrivedCB)
         con.RegisterHandler('message', self._StanzaArrivedCB)
         con.RegisterHandler('unknown', self._StreamCB,
-            common.xmpp.NS_XMPP_STREAMS, xmlns=common.xmpp.NS_STREAMS)
+            nbxmpp.NS_XMPP_STREAMS, xmlns=nbxmpp.NS_STREAMS)
+        con.RegisterHandler('iq', self._PubkeyGetCB, 'get',
+            nbxmpp.NS_PUBKEY_PUBKEY)
+        con.RegisterHandler('iq', self._PubkeyResultCB, 'result',
+            nbxmpp.NS_PUBKEY_PUBKEY)
+        con.RegisterHandler('iq', self._BlockingSetCB, 'set',
+            nbxmpp.NS_BLOCKING)

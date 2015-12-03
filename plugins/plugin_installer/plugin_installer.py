@@ -75,6 +75,12 @@ class PluginInstaller(GajimPlugin):
         icon = gtk.Image()
         self.def_icon = icon.render_icon(gtk.STOCK_PREFERENCES,
             gtk.ICON_SIZE_MENU)
+        if gajim.version.startswith('0.15'):
+            self.server_folder = 'plugins_0.15'
+        elif gajim.version.startswith('0.16.10'):
+            self.server_folder = 'plugins_gtk3'
+        else:
+            self.server_folder = 'plugins_0.16'
 
     @log_calls('PluginInstallerPlugin')
     def activate(self):
@@ -115,7 +121,7 @@ class PluginInstaller(GajimPlugin):
             try:
                 to_update = []
                 con = self.ftp_connect()
-                con.cwd('plugins')
+                con.cwd(self.server_folder)
                 con.retrbinary('RETR manifests.zip', ftp.handleDownload)
                 zip_file = zipfile.ZipFile(ftp.buffer_)
                 manifest_list = zip_file.namelist()
@@ -178,7 +184,8 @@ class PluginInstaller(GajimPlugin):
         self.GTK_BUILDER_FILE_PATH = self.local_file_path('config_dialog.ui')
         self.xml = gtk.Builder()
         self.xml.set_translation_domain('gajim_plugins')
-        self.xml.add_objects_from_file(self.GTK_BUILDER_FILE_PATH, ['hpaned2'])
+        self.xml.add_objects_from_file(self.GTK_BUILDER_FILE_PATH, ['hpaned2',
+            'image1'])
         self.hpaned = self.xml.get_object('hpaned2')
         self.page_num = self.notebook.append_page(self.hpaned,
             gtk.Label(_('Available')))
@@ -379,8 +386,18 @@ class PluginInstaller(GajimPlugin):
                 desc = '<body  xmlns=\'http://www.w3.org/1999/xhtml\'>' + \
                     desc + ' </body>'
                 desc = desc.replace('\n', '<br/>')
-            self.plugin_description_textview.tv.display_html(
-                desc, self.plugin_description_textview)
+            import inspect
+            args = inspect.getargspec(
+                self.plugin_description_textview.tv.display_html)
+            gajim_version = list(gajim.version.split('-', 1)[0].split('.'))
+            if (gajim_version >= [0, 16]):
+                # Gajim_0.16
+                self.plugin_description_textview.tv.display_html(desc,
+                    self.plugin_description_textview.tv,
+                    self.plugin_description_textview)
+            else:
+                self.plugin_description_textview.tv.display_html(desc,
+                    self.plugin_description_textview)
             self.plugin_description_textview.tv.set_property('sensitive', True)
         else:
             self._clear_available_plugin_info()
@@ -502,11 +519,12 @@ class Ftp(threading.Thread):
             gobject.idle_add(self.progressbar.set_text,
                 _('Connecting to server'))
             self.ftp = self.plugin.ftp_connect()
-            self.ftp.cwd('plugins')
+            self.ftp.cwd(self.plugin.server_folder)
             if not self.remote_dirs:
                 gobject.idle_add(self.progressbar.set_text,
                     _('Scan files on the server'))
-                self.ftp.retrbinary('RETR manifests_images.zip', self.handleDownload)
+                self.ftp.retrbinary('RETR manifests_images.zip',
+                    self.handleDownload)
                 zip_file = zipfile.ZipFile(self.buffer_)
                 manifest_list = zip_file.namelist()
                 progress_step = 1.0 / len(manifest_list)
@@ -599,7 +617,7 @@ class Ftp(threading.Thread):
                     else:
                         files.append(i[1:])
             dirs, files = [], []
-            nlstr('/plugins/' + remote_dir)
+            nlstr('/%s/%s' % (self.plugin.server_folder, remote_dir))
 
             base_dir, user_dir = gajim.PLUGINS_DIRS
             if not os.path.isdir(user_dir):
@@ -611,18 +629,17 @@ class Ftp(threading.Thread):
 
             # creating dirs
             for dir_ in dirs:
-                try:
-                    os.mkdir(os.path.join(local_dir, dir_))
-                except OSError, e:
-                    if str(e).startswith('[Errno 17]'):
-                        continue
-                    raise
+                dir_ = dir_.replace(self.plugin.server_folder, 'plugins')
+                if os.path.exists(os.path.join(local_dir, dir_)):
+                    continue
+                os.mkdir(os.path.join(local_dir, dir_))
 
             # downloading files
             for filename in files:
                 gobject.idle_add(self.progressbar.set_text,
                     _('Downloading "%s"') % filename)
-                full_filename = os.path.join(local_dir, filename)
+                full_filename = os.path.join(local_dir, filename.replace(
+                    self.plugin.server_folder, 'plugins'))
                 try:
                     self.ftp.retrbinary('RETR /%s' % filename,
                         open(full_filename, 'wb').write)

@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006-2007 Jean-Marie Traissard <jim AT lapin.org>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Lukas Petrovicky <lukas AT petrovicky.net>
 ##                    Julien Pivotto <roidelapluie AT gmail.com>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
@@ -118,24 +118,44 @@ class StatusIcon:
     def on_status_icon_size_changed(self, statusicon, size):
         if size > 31:
             self.statusicon_size = '32'
+        elif size > 23:
+            self.statusicon_size = '24'
         else:
             self.statusicon_size = '16'
         if os.environ.get('KDE_FULL_SESSION') == 'true':
         # detect KDE session. see #5476
             self.statusicon_size = '32'
+        if os.environ.get('MATE_DESKTOP_SESSION_ID'):
+        # detect MATE session.
+            self.statusicon_size = '16'
         self.set_img()
 
     def set_img(self):
         """
         Apart from image, we also update tooltip text here
         """
+        def really_set_img():
+            if image.get_storage_type() == gtk.IMAGE_PIXBUF:
+                self.status_icon.set_from_pixbuf(image.get_pixbuf())
+            # FIXME: oops they forgot to support GIF animation?
+            # or they were lazy to get it to work under Windows! WTF!
+            elif image.get_storage_type() == gtk.IMAGE_ANIMATION:
+                self.status_icon.set_from_pixbuf(
+                        image.get_animation().get_static_image())
+            #       self.status_icon.set_from_animation(image.get_animation())
+
         if not gajim.interface.systray_enabled:
             return
         if gajim.config.get('trayicon') == 'always':
             self.status_icon.set_visible(True)
         if gajim.events.get_nb_systray_events():
             self.status_icon.set_visible(True)
-            self.status_icon.set_blinking(True)
+            if gajim.config.get('trayicon_blink'):
+                self.status_icon.set_blinking(True)
+            else:
+                image = gtkgui_helpers.load_icon('event')
+                really_set_img()
+                return
         else:
             if gajim.config.get('trayicon') == 'on_event':
                 self.status_icon.set_visible(False)
@@ -143,14 +163,7 @@ class StatusIcon:
 
         image = gajim.interface.jabber_state_images[self.statusicon_size][
                                                                 self.status]
-        if image.get_storage_type() == gtk.IMAGE_PIXBUF:
-            self.status_icon.set_from_pixbuf(image.get_pixbuf())
-        # FIXME: oops they forgot to support GIF animation?
-        # or they were lazy to get it to work under Windows! WTF!
-        elif image.get_storage_type() == gtk.IMAGE_ANIMATION:
-            self.status_icon.set_from_pixbuf(
-                    image.get_animation().get_static_image())
-        #       self.img_tray.set_from_animation(image.get_animation())
+        really_set_img()
 
     def change_status(self, global_status):
         """
@@ -439,7 +452,7 @@ class StatusIcon:
 
     def on_clicked(self, widget, event):
         self.on_tray_leave_notify_event(widget, None)
-        if event.type != gtk.gdk.BUTTON_PRESS:
+        if event.type_ != gtk.gdk.BUTTON_PRESS:
             return
         if event.button == 1: # Left click
             self.on_left_click()

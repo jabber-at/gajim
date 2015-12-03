@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2005-2006 Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2007 Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2007 Stephan Erb <steve-e AT h3c.de>
@@ -59,7 +59,7 @@ import adhoc_commands
 import search_window
 
 from common import gajim
-from common import xmpp
+import nbxmpp
 from common.exceptions import GajimGeneralException
 from common import helpers
 from common import ged
@@ -70,57 +70,60 @@ from common import ged
 # when it advertises disco as it's feature, False means it's never browsable.
 def _gen_agent_type_info():
     return {
-            # Defaults
-            (0, 0):                                                 (None, None),
+        # Defaults
+        (0, 0):                         (None, None),
 
-            # Jabber server
-            ('server', 'im'):                               (ToplevelAgentBrowser, 'jabber'),
-            ('services', 'jabber'):         (ToplevelAgentBrowser, 'jabber'),
-            ('hierarchy', 'branch'):        (AgentBrowser, 'jabber'),
+        # Jabber server
+        ('server', 'im'):               (ToplevelAgentBrowser, 'jabber'),
+        ('services', 'jabber'):         (ToplevelAgentBrowser, 'jabber'),
+        ('hierarchy', 'branch'):        (AgentBrowser, 'jabber'),
 
-            # Services
-            ('conference', 'text'):         (MucBrowser, 'conference'),
-            ('headline', 'rss'):                    (AgentBrowser, 'rss'),
-            ('headline', 'weather'):        (False, 'weather'),
-            ('gateway', 'weather'):         (False, 'weather'),
-            ('_jid', 'weather'):                    (False, 'weather'),
-            ('gateway', 'sip'):                     (False, 'sip'),
-            ('directory', 'user'):          (None, 'jud'),
-            ('pubsub', 'generic'):          (PubSubBrowser, 'pubsub'),
-            ('pubsub', 'service'):          (PubSubBrowser, 'pubsub'),
-            ('proxy', 'bytestreams'):       (None, 'bytestreams'), # Socks5 FT proxy
-            ('headline', 'newmail'):        (ToplevelAgentBrowser, 'mail'),
+        # Services
+        ('conference', 'text'):         (MucBrowser, 'conference'),
+        ('headline', 'rss'):            (AgentBrowser, 'rss'),
+        ('headline', 'weather'):        (False, 'weather'),
+        ('gateway', 'weather'):         (False, 'weather'),
+        ('_jid', 'weather'):            (False, 'weather'),
+        ('gateway', 'sip'):             (False, 'sip'),
+        ('directory', 'user'):          (None, 'jud'),
+        ('pubsub', 'generic'):          (PubSubBrowser, 'pubsub'),
+        ('pubsub', 'service'):          (PubSubBrowser, 'pubsub'),
+        ('proxy', 'bytestreams'):       (None, 'bytestreams'), # Socks5 FT proxy
+        ('headline', 'newmail'):        (ToplevelAgentBrowser, 'mail'),
 
-            # Transports
-            ('conference', 'irc'):          (ToplevelAgentBrowser, 'irc'),
-            ('_jid', 'irc'):                                (False, 'irc'),
-            ('gateway', 'aim'):                     (False, 'aim'),
-            ('_jid', 'aim'):                                (False, 'aim'),
-            ('gateway', 'gadu-gadu'):       (False, 'gadu-gadu'),
-            ('_jid', 'gadugadu'):           (False, 'gadu-gadu'),
-            ('gateway', 'http-ws'):         (False, 'http-ws'),
-            ('gateway', 'icq'):                     (False, 'icq'),
-            ('_jid', 'icq'):                                (False, 'icq'),
-            ('gateway', 'msn'):                     (False, 'msn'),
-            ('_jid', 'msn'):                                (False, 'msn'),
-            ('gateway', 'sms'):                     (False, 'sms'),
-            ('_jid', 'sms'):                                (False, 'sms'),
-            ('gateway', 'smtp'):                    (False, 'mail'),
-            ('gateway', 'yahoo'):           (False, 'yahoo'),
-            ('_jid', 'yahoo'):                      (False, 'yahoo'),
-            ('gateway', 'mrim'):                    (False, 'mrim'),
-            ('_jid', 'mrim'):                               (False, 'mrim'),
-            ('gateway', 'facebook'):        (False, 'facebook'),
-            ('_jid', 'facebook'):           (False, 'facebook'),
+        # Transports
+        ('conference', 'irc'):          (ToplevelAgentBrowser, 'irc'),
+        ('_jid', 'irc'):                (False, 'irc'),
+        ('gateway', 'irc'):             (False, 'irc'),
+        ('gateway', 'aim'):             (False, 'aim'),
+        ('_jid', 'aim'):                (False, 'aim'),
+        ('gateway', 'gadu-gadu'):       (False, 'gadu-gadu'),
+        ('_jid', 'gadugadu'):           (False, 'gadu-gadu'),
+        ('gateway', 'http-ws'):         (False, 'http-ws'),
+        ('gateway', 'icq'):             (False, 'icq'),
+        ('_jid', 'icq'):                (False, 'icq'),
+        ('gateway', 'msn'):             (False, 'msn'),
+        ('_jid', 'msn'):                (False, 'msn'),
+        ('gateway', 'sms'):             (False, 'sms'),
+        ('_jid', 'sms'):                (False, 'sms'),
+        ('gateway', 'smtp'):            (False, 'mail'),
+        ('gateway', 'yahoo'):           (False, 'yahoo'),
+        ('_jid', 'yahoo'):              (False, 'yahoo'),
+        ('gateway', 'mrim'):            (False, 'mrim'),
+        ('_jid', 'mrim'):               (False, 'mrim'),
+        ('gateway', 'facebook'):        (False, 'facebook'),
+        ('_jid', 'facebook'):           (False, 'facebook'),
+        ('gateway', 'tv'):              (False, 'tv'),
+        ('gateway', 'twitter'):         (False, 'twitter'),
     }
 
 # Category type to "human-readable" description string, and sort priority
 _cat_to_descr = {
-        'other':                        (_('Others'),   2),
-        'gateway':              (_('Transports'),       0),
-        '_jid':                 (_('Transports'),       0),
+        'other':                (_('Others'),       2),
+        'gateway':              (_('Transports'),   0),
+        '_jid':                 (_('Transports'),   0),
         #conference is a category for listing mostly groupchats in service discovery
-        'conference':   (_('Conference'),       1),
+        'conference':           (_('Conference'),   1),
 }
 
 
@@ -291,11 +294,12 @@ class ServicesCache:
         if not self._cbs[cbkey]:
             del self._cbs[cbkey]
 
-    def get_icon(self, identities = []):
+    def get_icon(self, identities = [], addr=''):
         """
         Return the icon for an agent
         """
         # Grab the first identity with an icon
+        quiet = False
         for identity in identities:
             try:
                 cat, type_ = identity['category'], identity['type']
@@ -307,17 +311,22 @@ class ServicesCache:
                 break
         else:
             # Loop fell through, default to unknown
-            info = _agent_type_info[(0, 0)]
-            filename = info[1]
-        if not filename: # we don't have an image to show for this type
-            filename = 'jabber'
+            filename = addr.split('.')[0]
+            quiet = True
         # Use the cache if possible
         if filename in _icon_cache:
             return _icon_cache[filename]
         # Or load it
-        pix = gtkgui_helpers.get_icon_pixmap('gajim-agent-' + filename, size=32)
-        # Store in cache
-        _icon_cache[filename] = pix
+        pix = gtkgui_helpers.get_icon_pixmap('gajim-agent-' + filename, size=32,
+            quiet=quiet)
+        if pix:
+            # Store in cache
+            _icon_cache[filename] = pix
+            return pix
+        if 'jabber' in _icon_cache:
+            return _icon_cache['jabber']
+        pix = gtkgui_helpers.get_icon_pixmap('gajim-agent-jabber', size=32)
+        _icon_cache['jabber'] = pix
         return pix
 
     def get_browser(self, identities=[], features=[]):
@@ -350,7 +359,7 @@ class ServicesCache:
         # NS_DISCO_ITEMS anyways.
         # Allow browsing for unknown types aswell.
         if (not features and not identities) or \
-        xmpp.NS_DISCO_ITEMS in features or xmpp.NS_BROWSE in features:
+        nbxmpp.NS_DISCO_ITEMS in features or nbxmpp.NS_BROWSE in features:
             return ToplevelAgentBrowser
         return None
 
@@ -632,7 +641,7 @@ _('Without a connection, you can not browse available services'))
         if text_after:
             font.set_weight(pango.WEIGHT_NORMAL)
             markup = '%s\n<span font_desc="%s" size="small">%s</span>' % \
-                                                            (markup, font.to_string(), text_after)
+                (markup, font.to_string(), text_after)
         self.banner.set_markup(markup)
 
     def paint_banner(self):
@@ -758,12 +767,15 @@ _('Without a connection, you can not browse available services'))
                 # We can't travel anywhere else.
                 self.destroy()
             dialogs.ErrorDialog(_('The service could not be found'),
-_('There is no service at the address you entered, or it is not responding. Check the address and try again.'))
+                _('There is no service at the address you entered, or it is '
+                'not responding. Check the address and try again.'),
+                transient_for=self.window)
             return
         klass = self.cache.get_browser(identities, features)
         if not klass:
             dialogs.ErrorDialog(_('The service is not browsable'),
-_('This type of service does not contain any items to browse.'))
+                _('This type of service does not contain any items to browse.'),
+                transient_for=self.window)
             return
         elif klass is None:
             klass = AgentBrowser
@@ -814,7 +826,8 @@ _('This type of service does not contain any items to browse.'))
             jid = helpers.parse_jid(jid)
         except helpers.InvalidFormat, s:
             pritext = _('Invalid Server Name')
-            dialogs.ErrorDialog(pritext, str(s))
+            dialogs.ErrorDialog(pritext, str(s),
+                transient_for=self.window)
             return
         if jid == self.jid: # jid has not changed
             return
@@ -909,15 +922,12 @@ class AgentBrowser:
         perform
         """
         self.browse_button = gtk.Button()
-        image = gtk.image_new_from_stock(gtk.STOCK_OPEN, gtk.ICON_SIZE_BUTTON)
-        label = gtk.Label(_('_Browse'))
-        label.set_use_underline(True)
-        hbox = gtk.HBox()
-        hbox.pack_start(image, False, True, 6)
-        hbox.pack_end(label, True, True)
-        self.browse_button.add(hbox)
         self.browse_button.connect('clicked', self.on_browse_button_clicked)
         self.window.action_buttonbox.add(self.browse_button)
+        image = gtk.image_new_from_stock(gtk.STOCK_OPEN, gtk.ICON_SIZE_BUTTON)
+        self.browse_button.set_image(image)
+        label = _('_Browse')
+        self.browse_button.set_label(label)
         self.browse_button.show_all()
 
     def _clean_actions(self):
@@ -933,12 +943,21 @@ class AgentBrowser:
         Set the window title based on agent info
         """
         # Set the banner and window title
-        if 'name' in identities[0]:
-            name = identities[0]['name']
-            self.window._set_window_banner_text(self._get_agent_address(), name)
+        name = ''
+        if len(identities) > 1:
+            # Check if an identity with server category is present
+            for i, _identity in enumerate(identities):
+                if _identity['category'] == 'server' and 'name' in _identity:
+                    name = _identity['name']
+                    break
+                elif 'name' in identities[0]:
+                    name = identities[0]['name']
+
+        if name:
+          self.window._set_window_banner_text(self._get_agent_address(), name)
 
         # Add an icon to the banner.
-        pix = self.cache.get_icon(identities)
+        pix = self.cache.get_icon(identities, addr=self._get_agent_address())
         self.window.banner_icon.set_from_pixbuf(pix)
         self.window.banner_icon.show()
 
@@ -1085,11 +1104,15 @@ class AgentBrowser:
             return iter_
         return None
 
+    def add_self_line(self):
+        pass
+
     def _agent_items(self, jid, node, items, force):
         """
         Callback for when we receive a list of agent items
         """
         self.model.clear()
+        self.add_self_line()
         self._total_items = 0
         gobject.source_remove(self._pulse_timeout)
         self.window.progressbar.hide()
@@ -1099,19 +1122,32 @@ class AgentBrowser:
                 # We can't travel anywhere else.
                 self.window.destroy()
             dialogs.ErrorDialog(_('The service is not browsable'),
-_('This service does not contain any items to browse.'))
+                _('This service does not contain any items to browse.'),
+                transient_for=self.window.window)
             return
         # We got a list of items
-        self.window.services_treeview.set_model(None)
-        for item in items:
-            jid_ = item['jid']
-            node_ = item.get('node', '')
-            # If such an item is already here: don't add it
-            if self._find_item(jid_, node_):
-                continue
-            self._total_items += 1
-            self._add_item(jid_, node_, node, item, force)
-        self.window.services_treeview.set_model(self.model)
+        def fill_partial_rows(items):
+            '''Generator to fill the listmodel of a treeview progressively.'''
+            self.window.services_treeview.freeze_child_notify()
+            for item in items:
+                if self.window.dying:
+                    yield False
+                jid_ = item['jid']
+                node_ = item.get('node', '')
+                # If such an item is already here: don't add it
+                if self._find_item(jid_, node_):
+                    continue
+                self._total_items += 1
+                self._add_item(jid_, node_, node, item, force)
+                if (self._total_items % 10) == 0:
+                    self.window.services_treeview.thaw_child_notify()
+                    yield True
+                    self.window.services_treeview.freeze_child_notify()
+            self.window.services_treeview.thaw_child_notify()
+            #stop idle_add()
+            yield False
+        loader = fill_partial_rows(items)
+        gobject.idle_add(loader.next)
 
     def _agent_info(self, jid, node, identities, features, data):
         """
@@ -1180,6 +1216,22 @@ class ToplevelAgentBrowser(AgentBrowser):
         self._view_signals = []
         self._scroll_signal = None
 
+    def add_self_line(self):
+        addr = get_agent_address(self.jid, self.node)
+        descr = "<b>%s</b>" % addr
+        # Guess which kind of service this is
+        identities = []
+        type_ = gajim.get_transport_name_from_jid(self.jid,
+            use_config_setting=False)
+        if type_:
+            identity = {'category': '_jid', 'type': type_}
+            identities.append(identity)
+        # Set the pixmap for the row
+        pix = self.cache.get_icon(identities, addr=addr)
+        self.model.append(None, (self.jid, self.node, pix, descr, 1))
+        # Grab info on the service
+        self.cache.get_info(self.jid, self.node, self._agent_info, force=False)
+
     def _pixbuf_renderer_data_func(self, col, cell, model, iter_):
         """
         Callback for setting the pixbuf renderer's properties
@@ -1234,6 +1286,7 @@ class ToplevelAgentBrowser(AgentBrowser):
         return statecmp
 
     def _show_tooltip(self, state):
+        self.tooltip.timeout = 0
         view = self.window.services_treeview
         pointer = view.get_pointer()
         props = view.get_path_at_pos(pointer[0], pointer[1])
@@ -1251,13 +1304,13 @@ class ToplevelAgentBrowser(AgentBrowser):
     # These are all callbacks to make tooltips work
     def on_treeview_leave_notify_event(self, widget, event):
         props = widget.get_path_at_pos(int(event.x), int(event.y))
-        if self.tooltip.timeout > 0:
+        if self.tooltip.timeout > 0 or self.tooltip.shown:
             if not props or self.tooltip.id == props[0]:
                 self.tooltip.hide_tooltip()
 
     def on_treeview_motion_notify_event(self, widget, event):
         props = widget.get_path_at_pos(int(event.x), int(event.y))
-        if self.tooltip.timeout > 0:
+        if self.tooltip.timeout > 0 or self.tooltip.shown:
             if not props or self.tooltip.id != props[0]:
                 self.tooltip.hide_tooltip()
         if props:
@@ -1272,7 +1325,7 @@ class ToplevelAgentBrowser(AgentBrowser):
             state = self.model[iter_][4]
             # Not a category, and we have something to say about state
             if jid and state > 0 and \
-                            (self.tooltip.timeout == 0 or self.tooltip.id != props[0]):
+            (self.tooltip.timeout == 0 or self.tooltip.id != props[0]):
                 self.tooltip.id = row
                 self.tooltip.timeout = gobject.timeout_add(500,
                         self._show_tooltip, state)
@@ -1313,15 +1366,15 @@ class ToplevelAgentBrowser(AgentBrowser):
         # Connect signals
         scrollwin = self.window.services_scrollwin
         self._view_signals.append(view.connect('leave-notify-event',
-                                                                        self.on_treeview_leave_notify_event))
+            self.on_treeview_leave_notify_event))
         self._view_signals.append(view.connect('motion-notify-event',
-                                                                        self.on_treeview_motion_notify_event))
+            self.on_treeview_motion_notify_event))
         self._view_signals.append(view.connect('key-press-event',
-                                                                        self.on_treeview_event_hide_tooltip))
+            self.on_treeview_event_hide_tooltip))
         self._view_signals.append(view.connect('button-press-event',
-                                                                        self.on_treeview_event_hide_tooltip))
+            self.on_treeview_event_hide_tooltip))
         self._scroll_signal = scrollwin.connect('scroll-event',
-                                                                        self.on_treeview_event_hide_tooltip)
+            self.on_treeview_event_hide_tooltip)
 
     def _clean_treemodel(self):
         # Disconnect signals
@@ -1338,15 +1391,12 @@ class ToplevelAgentBrowser(AgentBrowser):
     def _add_actions(self):
         AgentBrowser._add_actions(self)
         self.execute_button = gtk.Button()
-        image = gtk.image_new_from_stock(gtk.STOCK_EXECUTE, gtk.ICON_SIZE_BUTTON)
-        label = gtk.Label(_('_Execute Command'))
-        label.set_use_underline(True)
-        hbox = gtk.HBox()
-        hbox.pack_start(image, False, True, 6)
-        hbox.pack_end(label, True, True)
-        self.execute_button.add(hbox)
         self.execute_button.connect('clicked', self.on_execute_button_clicked)
         self.window.action_buttonbox.add(self.execute_button)
+        image = gtk.image_new_from_stock(gtk.STOCK_EXECUTE, gtk.ICON_SIZE_BUTTON)
+        self.execute_button.set_image(image)
+        label = _('_Execute Command')
+        self.execute_button.set_label(label)
         self.execute_button.show_all()
 
         self.register_button = gtk.Button(label=_("Re_gister"),
@@ -1356,27 +1406,21 @@ class ToplevelAgentBrowser(AgentBrowser):
         self.register_button.show_all()
 
         self.join_button = gtk.Button()
-        image = gtk.image_new_from_stock(gtk.STOCK_CONNECT, gtk.ICON_SIZE_BUTTON)
-        label = gtk.Label(_('_Join'))
-        label.set_use_underline(True)
-        hbox = gtk.HBox()
-        hbox.pack_start(image, False, True, 6)
-        hbox.pack_end(label, True, True)
-        self.join_button.add(hbox)
         self.join_button.connect('clicked', self.on_join_button_clicked)
         self.window.action_buttonbox.add(self.join_button)
+        image = gtk.image_new_from_stock(gtk.STOCK_CONNECT, gtk.ICON_SIZE_BUTTON)
+        self.join_button.set_image(image)
+        label = _('_Join')
+        self.join_button.set_label(label)
         self.join_button.show_all()
 
         self.search_button = gtk.Button()
-        image = gtk.image_new_from_stock(gtk.STOCK_FIND, gtk.ICON_SIZE_BUTTON)
-        label = gtk.Label(_('_Search'))
-        label.set_use_underline(True)
-        hbox = gtk.HBox()
-        hbox.pack_start(image, False, True, 6)
-        hbox.pack_end(label, True, True)
-        self.search_button.add(hbox)
         self.search_button.connect('clicked', self.on_search_button_clicked)
         self.window.action_buttonbox.add(self.search_button)
+        image = gtk.image_new_from_stock(gtk.STOCK_FIND, gtk.ICON_SIZE_BUTTON)
+        self.search_button.set_image(image)
+        label = _('_Search')
+        self.search_button.set_label(label)
         self.search_button.show_all()
 
     def _clean_actions(self):
@@ -1502,31 +1546,34 @@ class ToplevelAgentBrowser(AgentBrowser):
 
     def _update_actions(self, jid, node, identities, features, data):
         AgentBrowser._update_actions(self, jid, node, identities, features, data)
-        if self.execute_button and xmpp.NS_COMMANDS in features:
+        if self.execute_button and nbxmpp.NS_COMMANDS in features:
             self.execute_button.set_sensitive(True)
-        if self.search_button and xmpp.NS_SEARCH in features:
+        if self.search_button and nbxmpp.NS_SEARCH in features:
             self.search_button.set_sensitive(True)
-        if self.register_button and xmpp.NS_REGISTER in features:
+        # Don't autorize to register with a server via disco
+        if self.register_button and nbxmpp.NS_REGISTER in features and \
+        jid != self.jid:
             # We can register this agent
             registered_transports = []
             jid_list = gajim.contacts.get_jid_list(self.account)
-            for jid in jid_list:
+            for jid_ in jid_list:
                 contact = gajim.contacts.get_first_contact_from_jid(
-                        self.account, jid)
+                        self.account, jid_)
                 if _('Transports') in contact.groups:
-                    registered_transports.append(jid)
+                    registered_transports.append(jid_)
+            registered_transports.append(self.jid)
             if jid in registered_transports:
                 self.register_button.set_label(_('_Edit'))
             else:
                 self.register_button.set_label(_('Re_gister'))
             self.register_button.set_sensitive(True)
-        if self.join_button and xmpp.NS_MUC in features:
+        if self.join_button and nbxmpp.NS_MUC in features:
             self.join_button.set_sensitive(True)
 
     def _default_action(self, jid, node, identities, features, data):
         if AgentBrowser._default_action(self, jid, node, identities, features, data):
             return True
-        if xmpp.NS_REGISTER in features:
+        if nbxmpp.NS_REGISTER in features:
             # Register if we can't browse
             self.on_register_button_clicked()
             return True
@@ -1624,6 +1671,11 @@ class ToplevelAgentBrowser(AgentBrowser):
         iter_ = None
         cat_iter = self.model.get_iter_root()
         while cat_iter and not iter_:
+            cjid = self.model.get_value(cat_iter, 0).decode('utf-8')
+            cnode = self.model.get_value(cat_iter, 1).decode('utf-8')
+            if jid == cjid and node == cnode:
+                iter_ = cat_iter
+                break
             iter_ = self.model.iter_children(cat_iter)
             while iter_:
                 cjid = self.model.get_value(iter_, 0).decode('utf-8')
@@ -1655,7 +1707,7 @@ class ToplevelAgentBrowser(AgentBrowser):
             # Put it in the 'other' category for now
             cat_args = ('other',)
         # Set the pixmap for the row
-        pix = self.cache.get_icon(identities)
+        pix = self.cache.get_icon(identities, addr=addr)
         # Put it in the right category
         cat = self._find_category(*cat_args)
         if not cat:
@@ -1687,7 +1739,7 @@ class ToplevelAgentBrowser(AgentBrowser):
         self._update_progressbar()
 
         # Search for an icon and category we can display
-        pix = self.cache.get_icon(identities)
+        pix = self.cache.get_icon(identities, addr=addr)
         cat, type_ = None, None
         for identity in identities:
             try:
@@ -1698,8 +1750,7 @@ class ToplevelAgentBrowser(AgentBrowser):
 
         # Check if we have to move categories
         old_cat_iter = self.model.iter_parent(iter_)
-        old_cat = self.model.get_value(old_cat_iter, 3).decode('utf-8')
-        if self.model.get_value(old_cat_iter, 3) == cat:
+        if not old_cat_iter or self.model.get_value(old_cat_iter, 3) == cat:
             # Already in the right category, just update
             self.model[iter_][2] = pix
             self.model[iter_][3] = descr
@@ -1708,6 +1759,7 @@ class ToplevelAgentBrowser(AgentBrowser):
         # Not in the right category, move it.
         self.model.remove(iter_)
 
+        old_cat = self.model.get_value(old_cat_iter, 3).decode('utf-8')
         # Check if the old category is empty
         if not self.model.iter_is_valid(old_cat_iter):
             old_cat_iter = self._find_category(old_cat)
@@ -1830,9 +1882,9 @@ class MucBrowser(AgentBrowser):
 
         for bookmark in gajim.connections[self.account].bookmarks:
             if bookmark['jid'] == bm['jid']:
-                dialogs.ErrorDialog(
-                        _('Bookmark already set'),
-                        _('Group Chat "%s" is already in your bookmarks.') % bm['jid'])
+                dialogs.ErrorDialog( _('Bookmark already set'),
+                _('Group Chat "%s" is already in your bookmarks.') % bm['jid'],
+                transient_for=self.window.window)
                 return
 
         gajim.connections[self.account].bookmarks.append(bm)
@@ -1841,8 +1893,9 @@ class MucBrowser(AgentBrowser):
         gajim.interface.roster.set_actions_menu_needs_rebuild()
 
         dialogs.InformationDialog(
-                        _('Bookmark has been added successfully'),
-                        _('You can manage your bookmarks via Actions menu in your roster.'))
+            _('Bookmark has been added successfully'),
+            _('You can manage your bookmarks via Actions menu in your roster.'),
+            transient_for=self.window.window)
 
     def on_join_button_clicked(self, *args):
         """
@@ -2026,7 +2079,8 @@ class DiscussionGroupsBrowser(AgentBrowser):
         self.subscribe_button = None
         self.unsubscribe_button = None
 
-        gajim.connections[account].send_pb_subscription_query(jid, self._on_pep_subscriptions)
+        gajim.connections[account].send_pb_subscription_query(jid,
+            self._on_pep_subscriptions)
 
     def _create_treemodel(self):
         """
@@ -2197,7 +2251,8 @@ class DiscussionGroupsBrowser(AgentBrowser):
 
         groupnode = model.get_value(iter_, 1)   # 1 = groupnode
 
-        gajim.connections[self.account].send_pb_subscribe(self.jid, groupnode, self._on_pep_subscribe, groupnode)
+        gajim.connections[self.account].send_pb_subscribe(self.jid, groupnode,
+            self._on_pep_subscribe, groupnode)
 
     def on_unsubscribe_button_clicked(self, widget):
         """
@@ -2208,7 +2263,8 @@ class DiscussionGroupsBrowser(AgentBrowser):
 
         groupnode = model.get_value(iter_, 1) # 1 = groupnode
 
-        gajim.connections[self.account].send_pb_unsubscribe(self.jid, groupnode, self._on_pep_unsubscribe, groupnode)
+        gajim.connections[self.account].send_pb_unsubscribe(self.jid, groupnode,
+            self._on_pep_unsubscribe, groupnode)
 
     def _on_pep_subscriptions(self, conn, request):
         """
@@ -2239,7 +2295,7 @@ class DiscussionGroupsBrowser(AgentBrowser):
         # we now know subscriptions, update button states
         self.update_actions()
 
-        raise xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _on_pep_subscribe(self, conn, request, groupnode):
         """
@@ -2255,7 +2311,7 @@ class DiscussionGroupsBrowser(AgentBrowser):
 
         self.update_actions()
 
-        raise xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
     def _on_pep_unsubscribe(self, conn, request, groupnode):
         """
@@ -2271,7 +2327,7 @@ class DiscussionGroupsBrowser(AgentBrowser):
 
         self.update_actions()
 
-        raise xmpp.NodeProcessed
+        raise nbxmpp.NodeProcessed
 
 # Fill the global agent type info dictionary
 _agent_type_info = _gen_agent_type_info()

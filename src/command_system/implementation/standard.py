@@ -126,11 +126,12 @@ class StandardCommonCommands(CommandContainer):
             self.echo(formatted)
 
     @command(raw=True, empty=True)
+    #Do not translate online, away, chat, xa, dnd
     @doc(_("""
     Set the current status
 
-    Status can be given as one of the following values: online, away,
-    chat, xa, dnd.
+    Status can be given as one of the following values:
+    online, away, chat, xa, dnd.
     """))
     def status(self, status, message):
         if status not in ('online', 'away', 'chat', 'xa', 'dnd'):
@@ -186,7 +187,7 @@ class StandardCommonChatCommands(CommandContainer):
         self.conv_textview.clear()
 
     @command
-    @doc(_("Toggle the GPG encryption"))
+    @doc(_("Toggle the OpenPGP encryption"))
     def gpg(self):
         self._toggle_gpg()
 
@@ -229,6 +230,11 @@ class StandardCommonChatCommands(CommandContainer):
         # appropriate button.
         state = self._video_button.get_active()
         self._video_button.set_active(not state)
+
+    @command(raw=True)
+    @doc(_("Send a message to the contact that will attract his (her) attention"))
+    def attention(self, message):
+        self.send_message(message, process_commands=False, attention=True)
 
 class StandardChatCommands(CommandContainer):
     """
@@ -348,6 +354,7 @@ class StandardGroupChatCommands(CommandContainer):
         self.connection.gc_set_role(self.room_jid, who, 'none', reason or str())
 
     @command(raw=True)
+    #Do not translate moderator, participant, visitor, none
     @doc(_("""Set occupant role in group chat.
     Role can be given as one of the following values:
     moderator, participant, visitor, none"""))
@@ -359,6 +366,7 @@ class StandardGroupChatCommands(CommandContainer):
         self.connection.gc_set_role(self.room_jid, who, role)
 
     @command(raw=True)
+    #Do not translate owner, admin, member, outcast, none
     @doc(_("""Set occupant affiliation in group chat.
     Affiliation can be given as one of the following values:
     owner, admin, member, outcast, none"""))
@@ -402,3 +410,12 @@ class StandardGroupChatCommands(CommandContainer):
     @doc(_("Allow an occupant to send you public or private messages"))
     def unblock(self, who):
         self.on_unblock(None, who)
+
+    @command
+    @doc(_("Send a ping to the contact"))
+    def ping(self, nick):
+        if self.account == gajim.ZEROCONF_ACC_NAME:
+            raise CommandError(_('Command is not supported for zeroconf accounts'))
+        gc_c = gajim.contacts.get_gc_contact(self.account, self.room_jid, nick)
+        gajim.connections[self.account].sendPing(gc_c, self)
+

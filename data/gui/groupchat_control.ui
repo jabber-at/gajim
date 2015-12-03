@@ -54,7 +54,7 @@
                           <object class="GtkLabel" id="banner_label">
                             <property name="visible">True</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">label</property>
+                            <property name="label">label</property>
                             <property name="use_markup">True</property>
                             <property name="selectable">True</property>
                           </object>
@@ -340,7 +340,7 @@
                 <property name="receives_default">True</property>
                 <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
                 <property name="has_tooltip">True</property>
-                <property name="tooltip_text" translatable="yes">Show a menu of advanced functions (Alt+D)</property>
+                <property name="tooltip_text" translatable="yes">Show advanced functions (Alt+D)</property>
                 <property name="relief">none</property>
                 <property name="focus_on_click">False</property>
                 <child>
@@ -386,45 +386,13 @@
             </child>
             <child>
               <object class="GtkButton" id="send_button">
+                <property name="label" translatable="yes">_Send</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <child>
-                  <object class="GtkAlignment" id="alignment105">
-                    <property name="visible">True</property>
-                    <property name="xscale">0</property>
-                    <property name="yscale">0</property>
-                    <child>
-                      <object class="GtkHBox" id="hbox3016">
-                        <property name="visible">True</property>
-                        <property name="spacing">2</property>
-                        <child>
-                          <object class="GtkImage" id="image1345">
-                            <property name="visible">True</property>
-                            <property name="stock">gtk-jump-to</property>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">False</property>
-                            <property name="position">0</property>
-                          </packing>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="label377">
-                            <property name="visible">True</property>
-                            <property name="label" translatable="yes" comments="Make sure the character after &quot;_&quot; is not M/m (conflicts with Alt+M that is supposed to show the Emoticon Selector)">_Send</property>
-                            <property name="use_underline">True</property>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">False</property>
-                            <property name="position">1</property>
-                          </packing>
-                        </child>
-                      </object>
-                    </child>
-                  </object>
-                </child>
+                <property name="tooltip_text" translatable="yes">Send message</property>
+                <property name="image">image1</property>
+                <property name="use_underline">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -443,5 +411,9 @@
         <property name="position">0</property>
       </packing>
     </child>
+  </object>
+  <object class="GtkImage" id="image1">
+    <property name="visible">True</property>
+    <property name="stock">gtk-jump-to</property>
   </object>
 </interface>

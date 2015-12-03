@@ -2,7 +2,7 @@
 ## src/search_window.py
 ##
 ## Copyright (C) 2007 Stephan Erb <steve-e AT h3c.de>
-## Copyright (C) 2007-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2007-2014 Yann Leboulanger <asterix AT lagaule.org>
 ##
 ## This file is part of Gajim.
 ##
@@ -48,6 +48,8 @@ class SearchWindow:
         'add_contact_button', 'information_button'):
             self.__dict__[name] = self.xml.get_object(name)
 
+        self.search_button.set_sensitive(False)
+
         # displaying the window
         self.xml.connect_signals(self)
         self.window.show_all()
@@ -89,7 +91,7 @@ class SearchWindow:
 
     def on_search_button_clicked(self, button):
         if self.is_form:
-            self.data_form_widget.data_form.type = 'submit'
+            self.data_form_widget.data_form.type_ = 'submit'
             gajim.connections[self.account].send_search_form(self.jid,
                     self.data_form_widget.data_form.get_purged(), True)
         else:
@@ -152,6 +154,7 @@ class SearchWindow:
 
         self.data_form_widget.show_all()
         self.search_vbox.pack_start(self.data_form_widget)
+        self.search_button.set_sensitive(True)
 
     def on_result_treeview_cursor_changed(self, treeview):
         if self.jid_column == -1:
@@ -228,7 +231,7 @@ class SearchWindow:
             self.on_result_treeview_cursor_changed)
 
         counter = 0
-        for field in self.dataform.items[0].fields:
+        for field in self.dataform.reported.iter_fields():
             if field.var == 'jid':
                 self.jid_column = counter
                 break

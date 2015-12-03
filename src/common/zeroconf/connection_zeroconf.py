@@ -7,7 +7,7 @@
 ##      - Travis Shirk <travis@pobox.com>
 ## - Stefan Bethge <stefan@lanpartei.de>
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix@lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix@lagaule.org>
 ## Copyright (C) 2003-2004 Vincent Hanquez <tab@snarc.org>
 ## Copyright (C) 2006 Nikos Kouremenos <nkour@jabber.org>
 ##                    Dimitur Kirov <dkirov@gmail.com>
@@ -297,6 +297,7 @@ class ConnectionZeroconf(CommonConnection, ConnectionHandlersZeroconf):
                 show=show))
         else:
             # show notification that avahi or system bus is down
+            self.connected = 0
             gajim.nec.push_incoming_event(OurShowEvent(None, conn=self,
                 show='offline'))
             self.status = 'offline'
@@ -333,52 +334,14 @@ class ConnectionZeroconf(CommonConnection, ConnectionHandlersZeroconf):
                 title=_('Could not change status of account "%s"') % self.name,
                 msg=_('Please check if avahi-daemon is running.')))
 
-    def send_message(self, jid, msg, keyID, type_='chat', subject='',
-    chatstate=None, msg_id=None, composing_xep=None, resource=None,
-    user_nick=None, xhtml=None, label=None, session=None, forward_from=None,
-    form_node=None, original_message=None, delayed=None, callback=None,
-    callback_args=[], now=True):
-
-        def on_send_ok(msg_id):
-            gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
-                jid=jid, message=msg, keyID=keyID))
-            if callback:
-                callback(msg_id, *callback_args)
-
-            self.log_message(jid, msg, forward_from, session, original_message,
-                    subject, type_)
-
-        def on_send_not_ok(reason):
-            reason += ' ' + _('Your message could not be sent.')
-            gajim.nec.push_incoming_event(MessageErrorEvent(None, conn=self,
-                fjid=jid, error_code=-1, error_msg=reason, msg=None, time_=None,
-                session=session))
-
-        def cb(jid, msg, keyID, forward_from, session, original_message, subject,
-        type_, msg_iq):
-            ret = self.connection.send(msg_iq, msg is not None, on_ok=on_send_ok,
-                    on_not_ok=on_send_not_ok)
-
-            if ret == -1:
-                # Contact Offline
-                gajim.nec.push_incoming_event(MessageErrorEvent(None, conn=self,
-                    fjid=jid, error_code=-1, error_msg=_(
-                    'Contact is offline. Your message could not be sent.'),
-                    msg=None, time_=None, session=session))
-
-        self._prepare_message(jid, msg, keyID, type_=type_, subject=subject,
-                chatstate=chatstate, msg_id=msg_id, composing_xep=composing_xep,
-                resource=resource, user_nick=user_nick, xhtml=xhtml, session=session,
-                forward_from=forward_from, form_node=form_node,
-                original_message=original_message, delayed=delayed, callback=cb)
-
     def _nec_message_outgoing(self, obj):
         if obj.account != self.name:
             return
 
         def on_send_ok(msg_id):
             gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
-                jid=obj.jid, message=obj.message, keyID=obj.keyID))
+                jid=obj.jid, message=obj.message, keyID=obj.keyID,
+                chatstate=None))
             if obj.callback:
                 obj.callback(obj.msg_id, *obj.callback_args)
 
@@ -407,24 +370,23 @@ class ConnectionZeroconf(CommonConnection, ConnectionHandlersZeroconf):
 
         self._prepare_message(obj.jid, obj.message, obj.keyID, type_=obj.type_,
             subject=obj.subject, chatstate=obj.chatstate, msg_id=obj.msg_id,
-            composing_xep=obj.composing_xep, resource=obj.resource,
-            user_nick=obj.user_nick, xhtml=obj.xhtml, label=obj.label,
-            session=obj.session, forward_from=obj.forward_from,
+            resource=obj.resource, user_nick=obj.user_nick, xhtml=obj.xhtml,
+            label=obj.label, session=obj.session, forward_from=obj.forward_from,
             form_node=obj.form_node, original_message=obj.original_message,
-            delayed=obj.delayed, callback=cb)
+            delayed=obj.delayed, attention=obj.attention, callback=cb)
 
     def send_stanza(self, stanza):
         # send a stanza untouched
         if not self.connection:
             return
-        if not isinstance(stanza, common.xmpp.Node):
-            stanza = common.xmpp.Protocol(node=stanza)
+        if not isinstance(stanza, nbxmpp.Node):
+            stanza = nbxmpp.Protocol(node=stanza)
         self.connection.send(stanza)
 
     def _event_dispatcher(self, realm, event, data):
         CommonConnection._event_dispatcher(self, realm, event, data)
         if realm == '':
-            if event == common.xmpp.transports_nb.DATA_ERROR:
+            if event == nbxmpp.transports_nb.DATA_ERROR:
                 thread_id = data[1]
                 frm = unicode(data[0])
                 session = self.get_or_create_session(frm, thread_id)

@@ -1,5 +1,16 @@
 data/gajim.desktop.in
 src/ipython_view.py
+plugins/acronyms_expander/acronyms_expander.py
+plugins/acronyms_expander/__init__.py
+plugins/dbus_plugin/__init__.py
+plugins/dbus_plugin/plugin.py
+plugins/events_dump/__init__.py
+plugins/events_dump/plugin.py
+plugins/new_events_example/__init__.py
+plugins/new_events_example/plugin.py
 plugins/plugin_installer/config_dialog.ui
 plugins/plugin_installer/__init__.py
 plugins/plugin_installer/plugin_installer.py
+plugins/roster_buttons/__init__.py
+plugins/roster_buttons/plugin.py
+plugins/roster_buttons/roster_buttons.ui

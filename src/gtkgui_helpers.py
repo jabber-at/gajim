@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/gtkgui_helpers.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2005-2007 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Travis Shirk <travis AT pobox.com>
@@ -44,11 +44,12 @@ from common import gajim
 gtk_icon_theme = gtk.icon_theme_get_default()
 gtk_icon_theme.append_search_path(gajim.ICONS_DIR)
 
-def get_icon_pixmap(icon_name, size=16):
+def get_icon_pixmap(icon_name, size=16, quiet=False):
     try:
         return gtk_icon_theme.load_icon(icon_name, size, 0)
     except gobject.GError, e:
-        log.error('Unable to load icon %s: %s' % (icon_name, str(e)))
+        if not quiet:
+            log.error('Unable to load icon %s: %s' % (icon_name, str(e)))
 
 def get_icon_path(icon_name, size=16):
     try:
@@ -743,7 +744,7 @@ Description=xmpp
             gajim.config.set('check_if_gajim_is_default', False)
 
     try:
-        import gconf
+        __import__('gconf')
         # in try because daemon may not be there
         client = gconf.client_get_default()
     except Exception:
@@ -853,8 +854,8 @@ def on_avatar_save_as_menuitem_activate(widget, jid, default_name=''):
                 return
             dialog2 = dialogs.FTOverwriteConfirmationDialog(
                 _('This file already exists'), _('What do you want to do?'),
-                propose_resume=False, on_response=(on_continue, file_path))
-            dialog2.set_transient_for(dialog)
+                propose_resume=False, on_response=(on_continue, file_path),
+                transient_for=dialog)
             dialog2.set_destroy_with_parent(True)
         else:
             dirname = os.path.dirname(file_path)
@@ -1042,15 +1043,39 @@ def make_jabber_state_images():
         iconset = gajim.config.DEFAULT_ICONSET
         gajim.config.set('iconset', iconset)
 
-    path = os.path.join(helpers.get_iconset_path(iconset), '32x32')
-    gajim.interface.jabber_state_images['32'] = load_iconset(path)
-
     path = os.path.join(helpers.get_iconset_path(iconset), '16x16')
     gajim.interface.jabber_state_images['16'] = load_iconset(path)
 
     pixo, pixc = load_icons_meta()
     gajim.interface.jabber_state_images['opened'] = load_iconset(path, pixo)
     gajim.interface.jabber_state_images['closed'] = load_iconset(path, pixc)
+
+    path = os.path.join(helpers.get_iconset_path(iconset), '32x32')
+    gajim.interface.jabber_state_images['32'] = load_iconset(path)
+
+    path = os.path.join(helpers.get_iconset_path(iconset), '24x24')
+    if (os.path.exists(path)):
+        gajim.interface.jabber_state_images['24'] = load_iconset(path)
+    else:
+        # Resize 32x32 icons to 24x24
+        for each in gajim.interface.jabber_state_images['32']:
+            img = gtk.Image()
+            pix = gajim.interface.jabber_state_images['32'][each]
+            pix_type = pix.get_storage_type()
+            if pix_type == gtk.IMAGE_ANIMATION:
+                animation = pix.get_animation()
+                pixbuf = animation.get_static_image()
+            elif pix_type == gtk.IMAGE_EMPTY:
+                pix = gajim.interface.jabber_state_images['16'][each]
+                pix_16_type = pix.get_storage_type()
+                if pix_16_type == gtk.IMAGE_ANIMATION:
+                    animation = pix.get_animation()
+                    pixbuf = animation.get_static_image()
+            else:
+                pixbuf = pix.get_pixbuf()
+            scaled_pix = pixbuf.scale_simple(24, 24, gtk.gdk.INTERP_BILINEAR)
+            img.set_from_pixbuf(scaled_pix)
+            gajim.interface.jabber_state_images['24'][each] = img
 
 def reload_jabber_state_images():
     make_jabber_state_images()

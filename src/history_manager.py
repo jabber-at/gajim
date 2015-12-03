@@ -4,7 +4,7 @@
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2006-2007 Jean-Marie Traissard <jim AT lapin.org>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Stephan Erb <steve-e AT h3c.de>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##
@@ -62,7 +62,7 @@ def parseOpts():
 
     try:
         shortargs = 'hc:'
-        longargs = 'help config_path='
+        longargs = 'help config-path='
         opts = getopt.getopt(sys.argv[1:], shortargs, longargs.split())[0]
     except getopt.error, msg:
         print str(msg)
@@ -70,7 +70,12 @@ def parseOpts():
         sys.exit(2)
     for o, a in opts:
         if o in ('-h', '--help'):
-            print 'history_manager [--help] [--config-path]'
+            print _('Usage:') + \
+                '\n  gajim-history-manager [options] filename\n\n' + \
+                _('Options:') + \
+                '\n  -h, --help         ' + \
+                    _('Show this help message and exit') + \
+                '\n  -c, --config-path  ' + _('Set logs directory') + '\n'
             sys.exit()
         elif o in ('-c', '--config-path'):
             config_path = a
@@ -158,7 +163,7 @@ class HistoryManager:
         self.jids_listview.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
 
         renderer_text = gtk.CellRendererText()  # holds jid
-        col = gtk.TreeViewColumn(_('Contacts'), renderer_text, text=0)
+        col = gtk.TreeViewColumn(_('Jabber ID'), renderer_text, text=0)
         self.jids_listview.append_column(col)
 
         self.jids_listview.get_selection().connect('changed',

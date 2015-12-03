@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2006 Jean-Marie Traissard <jim AT lapin.org>
 ##                    Junglecow J <junglecow AT gmail.com>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Brendan Taylor <whateley AT gmail.com>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##
@@ -141,7 +141,8 @@ class ConfigPaths:
         d = {'MY_DATA': '', 'LOG_DB': u'logs.db', 'MY_CACERTS': u'cacerts.pem',
                 'MY_EMOTS': u'emoticons', 'MY_ICONSETS': u'iconsets',
                 'MY_MOOD_ICONSETS': u'moods', 'MY_ACTIVITY_ICONSETS': u'activities',
-                'PLUGINS_USER': u'plugins'}
+                'PLUGINS_USER': u'plugins',
+                'RNG_SEED': u'rng_seed'}
         for name in d:
             self.add(name, TYPE_DATA, windowsify(d[name]))
 
@@ -176,16 +177,24 @@ class ConfigPaths:
         pidfile = windowsify(u'gajim')
         secretsfile = windowsify(u'secrets')
         pluginsconfdir = windowsify(u'pluginsconfig')
+        certsdir = windowsify(u'certs')
+        localcertsdir = windowsify(u'localcerts')
+
 
         if len(profile) > 0:
             conffile += u'.' + profile
             pidfile += u'.' + profile
             secretsfile += u'.' + profile
             pluginsconfdir += u'.' + profile
+            certsdir += u'.' + profile
+            localcertsdir += u'.' + profile
+
         pidfile += u'.pid'
         self.add('CONFIG_FILE', TYPE_CONFIG, conffile)
         self.add('PID_FILE', TYPE_CACHE, pidfile)
         self.add('SECRETS_FILE', TYPE_DATA, secretsfile)
         self.add('PLUGINS_CONFIG_DIR', TYPE_CONFIG, pluginsconfdir)
+        self.add('MY_PEER_CERTS', TYPE_DATA, certsdir)
+        self.add('MY_CERT', TYPE_CONFIG, localcertsdir)
 
 gajimpaths = ConfigPaths()

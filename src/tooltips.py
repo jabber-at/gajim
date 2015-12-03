@@ -5,7 +5,7 @@
 ##                    Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2005-2007 Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006 Travis Shirk <travis AT pobox.com>
 ##                    Stefan Bethge <stefan AT lanpartei.de>
 ## Copyright (C) 2006-2007 Jean-Marie Traissard <jim AT lapin.org>
@@ -71,6 +71,7 @@ class BaseTooltip:
         self.id = None
         self.cur_data = None
         self.check_last_time = None
+        self.shown = False
 
     def populate(self, data):
         """
@@ -115,6 +116,24 @@ class BaseTooltip:
 
     def on_size_request(self, widget, requisition):
         half_width = requisition.width / 2 + 1
+        if self.preferred_position[1] + requisition.height > \
+                self.screen.get_height():
+             # flip tooltip up
+            self.preferred_position[1] -= requisition.height + \
+                    self.widget_height + 8
+            if self.preferred_position[1] < 0:
+                self.preferred_position[1] = self.screen.get_height() - \
+                    requisition.height - 2
+
+                if self.preferred_position[0] + requisition.width + 7 < \
+                self.screen.get_width():
+                    self.preferred_position[0] = self.preferred_position[0] + 7
+                else:
+                    self.preferred_position[0] = self.preferred_position[0] - \
+                        requisition.width - 7
+                self.win.move(self.preferred_position[0],
+                    self.preferred_position[1])
+                return
         if self.preferred_position[0] < half_width:
             self.preferred_position[0] = 0
         elif self.preferred_position[0] + requisition.width > \
@@ -123,13 +142,6 @@ class BaseTooltip:
                     requisition.width
         elif not self.check_last_time:
             self.preferred_position[0] -= half_width
-        if self.preferred_position[1] + requisition.height > \
-                self.screen.get_height():
-            # flip tooltip up
-            self.preferred_position[1] -= requisition.height + \
-                    self.widget_height + 8
-        if self.preferred_position[1] < 0:
-            self.preferred_position[1] = 0
         self.win.move(self.preferred_position[0], self.preferred_position[1])
 
     def expose(self, widget, event):
@@ -147,6 +159,8 @@ class BaseTooltip:
         widget_height is the height of the widget on which we show the tooltip.
         widget_y_position is vertical position of the widget on the screen.
         """
+        if self.shown:
+            return
         self.cur_data = data
         # set tooltip contents
         self.populate(data)
@@ -162,6 +176,7 @@ class BaseTooltip:
         self.widget_height = widget_height
         self.win.ensure_style()
         self.win.show_all()
+        self.shown = True
 
     def hide_tooltip(self):
         if self.timeout > 0:
@@ -173,6 +188,7 @@ class BaseTooltip:
         self.id = None
         self.cur_data = None
         self.check_last_time = None
+        self.shown = False
 
     @staticmethod
     def colorize_status(status):
@@ -390,7 +406,8 @@ class GCTooltip(BaseTooltip):
         properties.append((show, None))
 
         if contact.jid.strip():
-            properties.append((_('Jabber ID: '), "<b>%s</b>" % contact.jid))
+            properties.append((_('Jabber ID: '), u'\u200E' + "<b>%s</b>" % \
+                contact.jid))
 
         if hasattr(contact, 'resource') and contact.resource.strip():
             properties.append((_('Resource: '),
@@ -610,7 +627,8 @@ class RosterTooltip(NotificationAreaTooltip):
 
         self._append_pep_info(contact, properties)
 
-        properties.append((_('Jabber ID: '), "<b>%s</b>" % prim_contact.jid))
+        properties.append((_('Jabber ID: '), u'\u200E' + "<b>%s</b>" % \
+            prim_contact.jid))
 
         # contact has only one ressource
         if num_resources == 1 and contact.resource:
@@ -709,19 +727,19 @@ class RosterTooltip(NotificationAreaTooltip):
         """
         if 'mood' in contact.pep:
             mood = contact.pep['mood'].asMarkupText()
-            properties.append((_("Mood: %s") % mood, None))
+            properties.append((_('Mood: '), "%s" % mood, None))
 
         if 'activity' in contact.pep:
             activity = contact.pep['activity'].asMarkupText()
-            properties.append((_("Activity: %s") % activity, None))
+            properties.append((_('Activity: '), "%s" % activity, None))
 
         if 'tune' in contact.pep:
             tune = contact.pep['tune'].asMarkupText()
-            properties.append((_("Tune: %s") % tune, None))
+            properties.append((_('Tune: '), "%s" % tune, None))
 
         if 'location' in contact.pep:
             location = contact.pep['location'].asMarkupText()
-            properties.append((_("Location: %s") % location, None))
+            properties.append((_('Location: '), "%s" % location, None))
 
 
 class FileTransfersTooltip(BaseTooltip):
@@ -738,23 +756,23 @@ class FileTransfersTooltip(BaseTooltip):
         current_row = 1
         self.create_window()
         properties = []
-        name = file_props['name']
-        if file_props['type'] == 'r':
-            file_name = os.path.split(file_props['file-name'])[1]
+        name = file_props.name
+        if file_props.type_ == 'r':
+            file_name = os.path.split(file_props.file_name)[1]
         else:
-            file_name = file_props['name']
+            file_name = file_props.name
         properties.append((_('Name: '),
                 gobject.markup_escape_text(file_name)))
-        if file_props['type'] == 'r':
+        if file_props.type_ == 'r':
             type_ = _('Download')
             actor = _('Sender: ')
-            sender = unicode(file_props['sender']).split('/')[0]
+            sender = unicode(file_props.sender).split('/')[0]
             name = gajim.contacts.get_first_contact_from_jid(
-                    file_props['tt_account'], sender).get_shown_name()
+                    file_props.tt_account, sender).get_shown_name()
         else:
             type_ = _('Upload')
             actor = _('Recipient: ')
-            receiver = file_props['receiver']
+            receiver = file_props.receiver
             if hasattr(receiver, 'name'):
                 name = receiver.get_shown_name()
             else:
@@ -762,26 +780,24 @@ class FileTransfersTooltip(BaseTooltip):
         properties.append((_('Type: '), type_))
         properties.append((actor, gobject.markup_escape_text(name)))
 
-        transfered_len = file_props.get('received-len', 0)
+        transfered_len = file_props.received_len
+        if not transfered_len:
+            transfered_len = 0
         properties.append((_('Transferred: '), helpers.convert_bytes(transfered_len)))
         status = ''
-        if 'started' not in file_props or not file_props['started']:
+        if file_props.started:
             status = _('Not started')
-        elif 'connected' in file_props:
-            if 'stopped' in file_props and \
-            file_props['stopped'] == True:
-                status = _('Stopped')
-            elif file_props['completed']:
+        if file_props.stopped == True:
+            status = _('Stopped')
+        elif file_props.completed:
+            status = _('Completed')
+        elif file_props.connected == False:
+            if file_props.completed:
                 status = _('Completed')
-            elif file_props['connected'] == False:
-                if file_props['completed']:
-                    status = _('Completed')
             else:
-                if 'paused' in file_props and \
-                file_props['paused'] == True:
+                if file_props.paused == True:
                     status = _('?transfer status:Paused')
-                elif 'stalled' in file_props and \
-                file_props['stalled'] == True:
+                elif file_props.stalled == True:
                     #stalled is not paused. it is like 'frozen' it stopped alone
                     status = _('Stalled')
                 else:
@@ -789,10 +805,9 @@ class FileTransfersTooltip(BaseTooltip):
         else:
             status = _('Not started')
         properties.append((_('Status: '), status))
-        if 'desc' in file_props:
-            file_desc = file_props['desc']
-            properties.append((_('Description: '), gobject.markup_escape_text(
-                    file_desc)))
+        file_desc = file_props.desc or ''
+        properties.append((_('Description: '), gobject.markup_escape_text(
+                file_desc)))
         while properties:
             property_ = properties.pop(0)
             current_row += 1

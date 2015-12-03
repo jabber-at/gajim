@@ -5,7 +5,7 @@
 ## Copyright (C) 2005-2006 Alex Mauer <hawke AT hawkesnest.net>
 ##                         Travis Shirk <travis AT pobox.com>
 ## Copyright (C) 2005-2007 Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
@@ -43,7 +43,6 @@ import urllib
 import gtkgui_helpers
 from common import gajim
 from common import helpers
-from common import latex
 from common import i18n
 from calendar import timegm
 from common.fuzzyclock import FuzzyClock
@@ -75,7 +74,7 @@ class TextViewImage(gtk.Image):
         self._disconnect_funcs = []
         self.connect('parent-set', self.on_parent_set)
         self.connect('expose-event', self.on_expose)
-        self.set_tooltip_text(text)
+        self.set_tooltip_markup(text)
         self.anchor.set_data('plaintext', text)
 
     def _get_selected(self):
@@ -170,9 +169,7 @@ class ConversationTextview(gobject.GObject):
             )
     )
 
-    FOCUS_OUT_LINE_PIXBUF = gtkgui_helpers.get_icon_pixmap('gajim-muc_separator')
-    XEP0184_WARNING_PIXBUF = gtkgui_helpers.get_icon_pixmap(
-            'gajim-receipt_missing')
+    MESSAGE_CORRECTED_PIXBUF = gtkgui_helpers.get_icon_pixmap('gtk-spell-check')
 
     # smooth scroll constants
     MAX_SCROLL_TIME = 0.4 # seconds
@@ -206,6 +203,9 @@ class ConversationTextview(gobject.GObject):
         self.image_cache = {}
         self.xep0184_marks = {}
         self.xep0184_shown = {}
+        self.last_sent_message_marks = [None, None]
+        # A pair per occupant. Key is '' in normal chat
+        self.last_received_message_marks = {}
 
         # It's True when we scroll in the code, so we can detect scroll from user
         self.auto_scrolling = False
@@ -274,10 +274,10 @@ class ConversationTextview(gobject.GObject):
             tag = buffer_.create_tag(tagname)
             tag.set_property('foreground', color)
 
-        tag = buffer_.create_tag('marked')
+        self.tagMarked = buffer_.create_tag('marked')
         color = gajim.config.get('markedmsgcolor')
-        tag.set_property('foreground', color)
-        tag.set_property('weight', pango.WEIGHT_BOLD)
+        self.tagMarked.set_property('foreground', color)
+        self.tagMarked.set_property('weight', pango.WEIGHT_BOLD)
 
         tag = buffer_.create_tag('time_sometimes')
         tag.set_property('foreground', 'darkgrey')
@@ -291,31 +291,7 @@ class ConversationTextview(gobject.GObject):
         color = gajim.config.get('restored_messages_color')
         tag.set_property('foreground', color)
 
-        self.tagURL = buffer_.create_tag('url')
-        color = gajim.config.get('urlmsgcolor')
-        self.tagURL.set_property('foreground', color)
-        self.tagURL.set_property('underline', pango.UNDERLINE_SINGLE)
-        id_ = self.tagURL.connect('event', self.hyperlink_handler, 'url')
-        self.handlers[id_] = self.tagURL
-
-        self.tagMail = buffer_.create_tag('mail')
-        self.tagMail.set_property('foreground', color)
-        self.tagMail.set_property('underline', pango.UNDERLINE_SINGLE)
-        id_ = self.tagMail.connect('event', self.hyperlink_handler, 'mail')
-        self.handlers[id_] = self.tagMail
-
-        self.tagXMPP = buffer_.create_tag('xmpp')
-        self.tagXMPP.set_property('foreground', color)
-        self.tagXMPP.set_property('underline', pango.UNDERLINE_SINGLE)
-        id_ = self.tagXMPP.connect('event', self.hyperlink_handler, 'xmpp')
-        self.handlers[id_] = self.tagXMPP
-
-        self.tagSthAtSth = buffer_.create_tag('sth_at_sth')
-        self.tagSthAtSth.set_property('foreground', color)
-        self.tagSthAtSth.set_property('underline', pango.UNDERLINE_SINGLE)
-        id_ = self.tagSthAtSth.connect('event', self.hyperlink_handler,
-                'sth_at_sth')
-        self.handlers[id_] = self.tagSthAtSth
+        self.tv.create_tags()
 
         tag = buffer_.create_tag('bold')
         tag.set_property('weight', pango.WEIGHT_BOLD)
@@ -330,6 +306,10 @@ class ConversationTextview(gobject.GObject):
         self.displaymarking_tags = {}
 
         tag = buffer_.create_tag('xep0184-warning')
+        tag.set_property('foreground', '#cc0000')
+
+        tag = buffer_.create_tag('xep0184-received')
+        tag.set_property('foreground', '#73d216')
 
         # One mark at the begining then 2 marks between each lines
         size = gajim.config.get('max_conversation_lines')
@@ -343,9 +323,8 @@ class ConversationTextview(gobject.GObject):
         self.xep0184_warning_tooltip = tooltips.BaseTooltip()
 
         self.line_tooltip = tooltips.BaseTooltip()
-        # use it for hr too
-        self.tv.focus_out_line_pixbuf = ConversationTextview.FOCUS_OUT_LINE_PIXBUF
         self.smooth_id = None
+        self.just_cleared = False
 
     def del_handlers(self):
         for i in self.handlers.keys():
@@ -360,9 +339,14 @@ class ConversationTextview(gobject.GObject):
         self.tagIn.set_property('foreground', gajim.config.get('inmsgcolor'))
         self.tagOut.set_property('foreground', gajim.config.get('outmsgcolor'))
         self.tagStatus.set_property('foreground',
-                gajim.config.get('statusmsgcolor'))
-        self.tagURL.set_property('foreground', gajim.config.get('urlmsgcolor'))
-        self.tagMail.set_property('foreground', gajim.config.get('urlmsgcolor'))
+            gajim.config.get('statusmsgcolor'))
+        self.tagMarked.set_property('foreground',
+            gajim.config.get('markedmsgcolor'))
+        color = gajim.config.get('urlmsgcolor')
+        self.tv.tagURL.set_property('foreground', color)
+        self.tv.tagMail.set_property('foreground', color)
+        self.tv.tagXMPP.set_property('foreground', color)
+        self.tv.tagSthAtSth.set_property('foreground', color)
 
     def at_the_end(self):
         buffer_ = self.tv.get_buffer()
@@ -460,6 +444,56 @@ class ConversationTextview(gobject.GObject):
             self.smooth_id = None
             self.smooth_scroll_timer.cancel()
 
+    def show_corrected_message_warning(self, iter_, text=''):
+        buffer_ = self.tv.get_buffer()
+        buffer_.begin_user_action()
+        buffer_.insert(iter_, ' ')
+        anchor = buffer_.create_child_anchor(iter_)
+        img = TextViewImage(anchor, text)
+        img.set_from_pixbuf(ConversationTextview.MESSAGE_CORRECTED_PIXBUF)
+        img.show()
+        self.tv.add_child_at_anchor(img, anchor)
+        buffer_.end_user_action()
+
+    def correct_last_sent_message(self, message, xhtml, name, old_txt):
+        m1 = self.last_sent_message_marks[0]
+        m2 = self.last_sent_message_marks[1]
+        buffer_ = self.tv.get_buffer()
+        i1 = buffer_.get_iter_at_mark(m1)
+        i2 = buffer_.get_iter_at_mark(m2)
+        txt = buffer_.get_text(i1, i2)
+        buffer_.delete(i1, i2)
+        tag = 'outgoingtxt'
+        if message.startswith('/me'):
+            tag = 'outgoing'
+        i2 = self.print_conversation_line(message, '', 'outgoing', name, None,
+            xhtml=xhtml, iter_=i1)
+        tt_txt = _('<b>Message was corrected. Last message was:</b>\n  %s') % \
+            gobject.markup_escape_text(old_txt)
+        self.show_corrected_message_warning(i2, tt_txt)
+        self.last_sent_message_marks[1] = buffer_.create_mark(None, i2,
+            left_gravity=True)
+
+    def correct_last_received_message(self, message, xhtml, name, old_txt,
+    other_tags_for_name=[], other_tags_for_text=[]):
+        if name not in self.last_received_message_marks:
+            return
+        m1 = self.last_received_message_marks[name][0]
+        m2 = self.last_received_message_marks[name][1]
+        buffer_ = self.tv.get_buffer()
+        i1 = buffer_.get_iter_at_mark(m1)
+        i2 = buffer_.get_iter_at_mark(m2)
+        txt = buffer_.get_text(i1, i2)
+        buffer_.delete(i1, i2)
+        i2 = self.print_conversation_line(message, '', 'incoming', name, None,
+            other_tags_for_name=other_tags_for_name,
+            other_tags_for_text=other_tags_for_text, xhtml=xhtml, iter_=i1)
+        tt_txt = _('<b>Message was corrected. Last message was:</b>\n  %s') % \
+            gobject.markup_escape_text(old_txt)
+        self.show_corrected_message_warning(i2, tt_txt)
+        self.last_received_message_marks[name][1] = buffer_.create_mark(None, i2,
+            left_gravity=True)
+
     def show_xep0184_warning(self, id_):
         if id_ in self.xep0184_marks:
             return
@@ -477,18 +511,7 @@ class ConversationTextview(gobject.GObject):
                 return False
 
             end_iter = buffer_.get_iter_at_mark(self.xep0184_marks[id_])
-            buffer_.insert(end_iter, ' ')
-            anchor = buffer_.create_child_anchor(end_iter)
-            img = TextViewImage(anchor, '')
-            img.set_from_pixbuf(ConversationTextview.XEP0184_WARNING_PIXBUF)
-            img.show()
-            self.tv.add_child_at_anchor(img, anchor)
-            before_img_iter = buffer_.get_iter_at_mark(self.xep0184_marks[id_])
-            before_img_iter.forward_char()
-            post_img_iter = before_img_iter.copy()
-            post_img_iter.forward_char()
-            buffer_.apply_tag_by_name('xep0184-warning', before_img_iter,
-                    post_img_iter)
+            buffer_.insert_with_tags_by_name(end_iter, ' ✖', 'xep0184-warning')
 
             self.xep0184_shown[id_] = SHOWN
             return False
@@ -500,22 +523,25 @@ class ConversationTextview(gobject.GObject):
         if id_ not in self.xep0184_marks:
             return
 
-        if self.xep0184_shown[id_] == NOT_SHOWN:
-            self.xep0184_shown[id_] = ALREADY_RECEIVED
-            return
-
         buffer_ = self.tv.get_buffer()
         buffer_.begin_user_action()
 
-        begin_iter = buffer_.get_iter_at_mark(self.xep0184_marks[id_])
+        if self.xep0184_shown[id_] != NOT_SHOWN:
+            begin_iter = buffer_.get_iter_at_mark(self.xep0184_marks[id_])
 
-        end_iter = begin_iter.copy()
-        # XXX: Is there a nicer way?
-        end_iter.forward_char()
-        end_iter.forward_char()
+            end_iter = begin_iter.copy()
+            # XXX: Is there a nicer way?
+            end_iter.forward_char()
+            end_iter.forward_char()
 
-        buffer_.delete(begin_iter, end_iter)
-        buffer_.delete_mark(self.xep0184_marks[id_])
+            buffer_.delete(begin_iter, end_iter)
+
+        if gajim.config.get('positive_184_ack'):
+            begin_iter = buffer_.get_iter_at_mark(self.xep0184_marks[id_])
+            buffer_.insert_with_tags_by_name(begin_iter, ' ✓',
+                'xep0184-received')
+
+        self.xep0184_shown[id_] = ALREADY_RECEIVED
 
         buffer_.end_user_action()
 
@@ -554,7 +580,7 @@ class ConversationTextview(gobject.GObject):
                         self.focus_out_end_mark)
                 begin_iter_for_previous_line = end_iter_for_previous_line.copy()
                 # img_char+1 (the '\n')
-                begin_iter_for_previous_line.backward_chars(2)
+                begin_iter_for_previous_line.backward_chars(21)
 
                 # remove focus out line
                 buffer_.delete(begin_iter_for_previous_line,
@@ -563,14 +589,12 @@ class ConversationTextview(gobject.GObject):
 
             # add the new focus out line
             end_iter = buffer_.get_end_iter()
-            buffer_.insert(end_iter, '\n')
-            buffer_.insert_pixbuf(end_iter,
-                    ConversationTextview.FOCUS_OUT_LINE_PIXBUF)
+            buffer_.insert(end_iter, '\n' + '―' * 20)
 
             end_iter = buffer_.get_end_iter()
             before_img_iter = end_iter.copy()
             # one char back (an image also takes one char)
-            before_img_iter.backward_char()
+            before_img_iter.backward_chars(20)
             buffer_.apply_tag_by_name('focus-out-line', before_img_iter, end_iter)
 
             self.allow_focus_out_line = False
@@ -587,6 +611,7 @@ class ConversationTextview(gobject.GObject):
                 gobject.idle_add(self.scroll_to_end)
 
     def show_xep0184_warning_tooltip(self):
+        self.xep0184_warning_tooltip.timeout = 0
         pointer = self.tv.get_pointer()
         x, y = self.tv.window_to_buffer_coords(gtk.TEXT_WINDOW_TEXT,
                 pointer[0], pointer[1])
@@ -600,12 +625,13 @@ class ConversationTextview(gobject.GObject):
         if xep0184_warning and not self.xep0184_warning_tooltip.win:
             # check if the current pointer is still over the line
             position = self.tv.window.get_origin()
-            self.xep0184_warning_tooltip.show_tooltip(_('This icon indicates that '
-                    'this message has not yet\nbeen received by the remote end. '
-                    "If this icon stays\nfor a long time, it's likely the message got "
-                    'lost.'), 8, position[1] + pointer[1])
+            self.xep0184_warning_tooltip.show_tooltip(_('This icon indicates '
+                'that this message has not yet\nbeen received by the remote '
+                "end. If this icon stays\nfor a long time, it's likely the "
+                'message got lost.'), 8, position[1] + pointer[1])
 
     def show_line_tooltip(self):
+        self.line_tooltip.timeout = 0
         pointer = self.tv.get_pointer()
         x, y = self.tv.window_to_buffer_coords(gtk.TEXT_WINDOW_TEXT,
                 pointer[0], pointer[1])
@@ -675,11 +701,12 @@ class ConversationTextview(gobject.GObject):
             elif tag == tag_table.lookup('xep0184-warning'):
                 xep0184_warning = True
 
-        if self.line_tooltip.timeout != 0:
+        if self.line_tooltip.timeout != 0 or self.line_tooltip.shown:
             # Check if we should hide the line tooltip
             if not over_line:
                 self.line_tooltip.hide_tooltip()
-        if self.xep0184_warning_tooltip.timeout != 0:
+        if self.xep0184_warning_tooltip.timeout != 0 or \
+        self.xep0184_warning_tooltip.shown:
             # Check if we should hide the XEP-184 warning tooltip
             if not xep0184_warning:
                 self.xep0184_warning_tooltip.hide_tooltip()
@@ -986,7 +1013,8 @@ class ConversationTextview(gobject.GObject):
                 else:
                     helpers.launch_browser_mailer(kind, word)
 
-    def detect_and_print_special_text(self, otext, other_tags, graphics=True):
+    def detect_and_print_special_text(self, otext, other_tags, graphics=True,
+    iter_=None):
         """
         Detect special text (emots & links & formatting), print normal text
         before any special text it founds, then print special text (that happens
@@ -1016,29 +1044,35 @@ class ConversationTextview(gobject.GObject):
             iterator = gajim.interface.emot_and_basic_re.finditer(otext)
         else: # search for just urls + mail + formatting
             iterator = gajim.interface.basic_pattern_re.finditer(otext)
+        if iter_:
+            end_iter = iter_
+        else:
+            end_iter = buffer_.get_end_iter()
         for match in iterator:
             start, end = match.span()
             special_text = otext[start:end]
             if start > index:
                 text_before_special_text = otext[index:start]
-                end_iter = buffer_.get_end_iter()
+                if not iter_:
+                    end_iter = buffer_.get_end_iter()
                 # we insert normal text
                 insert_tags_func(end_iter, text_before_special_text, *other_tags)
             index = end # update index
 
             # now print it
-            self.print_special_text(special_text, other_tags, graphics=graphics)
+            self.print_special_text(special_text, other_tags, graphics=graphics,
+                iter_=end_iter)
             specials_limit -= 1
             if specials_limit <= 0:
                 break
 
         # add the rest of text located in the index and after
-        end_iter = buffer_.get_end_iter()
         insert_tags_func(end_iter, otext[index:], *other_tags)
 
-        return buffer_.get_end_iter()
+        return end_iter
 
-    def print_special_text(self, special_text, other_tags, graphics=True):
+    def print_special_text(self, special_text, other_tags, graphics=True,
+    iter_=None):
         """
         Is called by detect_and_print_special_text and prints special text
         (emots, links, formatting)
@@ -1048,7 +1082,7 @@ class ConversationTextview(gobject.GObject):
         # PluginSystem: adding GUI extension point for ConversationTextview
         self.plugin_modified = False
         gajim.plugin_manager.gui_extension_point('print_special_text', self,
-            special_text, other_tags, graphics)
+            special_text, other_tags, graphics, iter_)
         if self.plugin_modified:
             return
 
@@ -1057,7 +1091,7 @@ class ConversationTextview(gobject.GObject):
         text_is_valid_uri = False
         is_xhtml_link = None
         show_ascii_formatting_chars = \
-                gajim.config.get('show_ascii_formatting_chars')
+            gajim.config.get('show_ascii_formatting_chars')
         buffer_ = self.tv.get_buffer()
 
         # Detect XHTML-IM link
@@ -1075,17 +1109,21 @@ class ConversationTextview(gobject.GObject):
                 text_is_valid_uri = True
 
         possible_emot_ascii_caps = special_text.upper() # emoticons keys are CAPS
+        if iter_:
+            end_iter = iter_
+        else:
+            end_iter = buffer_.get_end_iter()
         if gajim.config.get('emoticons_theme') and \
         possible_emot_ascii_caps in gajim.interface.emoticons.keys() and graphics:
             # it's an emoticon
             emot_ascii = possible_emot_ascii_caps
-            end_iter = buffer_.get_end_iter()
             anchor = buffer_.create_child_anchor(end_iter)
-            img = TextViewImage(anchor, special_text)
+            img = TextViewImage(anchor,
+                gobject.markup_escape_text(special_text))
             animations = gajim.interface.emoticons_animations
             if not emot_ascii in animations:
                 animations[emot_ascii] = gtk.gdk.PixbufAnimation(
-                        gajim.interface.emoticons[emot_ascii])
+                    gajim.interface.emoticons[emot_ascii])
             img.set_from_animation(animations[emot_ascii])
             img.show()
             self.images.append(img)
@@ -1096,13 +1134,13 @@ class ConversationTextview(gobject.GObject):
             text_is_valid_uri and not is_xhtml_link:
                 tags.append('url')
         elif special_text.startswith('mailto:') and not is_xhtml_link:
-                tags.append('mail')
+            tags.append('mail')
         elif special_text.startswith('xmpp:') and not is_xhtml_link:
-                tags.append('xmpp')
+            tags.append('xmpp')
         elif gajim.interface.sth_at_sth_dot_sth_re.match(special_text) and\
         not is_xhtml_link:
-                # it's a JID or mail
-                tags.append('sth_at_sth')
+            # it's a JID or mail
+            tags.append('sth_at_sth')
         elif special_text.startswith('*'): # it's a bold text
             tags.append('bold')
             if special_text[1] == '/' and special_text[-2] == '/' and\
@@ -1148,35 +1186,9 @@ class ConversationTextview(gobject.GObject):
             else:
                 if not show_ascii_formatting_chars:
                     special_text = special_text[1:-1] # remove _ _
-        elif gajim.HAVE_LATEX and special_text.startswith('$$') and \
-        special_text.endswith('$$') and graphics:
-            try:
-                imagepath = latex.latex_to_image(special_text[2:-2])
-            except LatexError, e:
-                # print the error after the line has been written
-                gobject.idle_add(self.print_conversation_line, str(e), '', 'info',
-                        '', None)
-                imagepath = None
-            end_iter = buffer_.get_end_iter()
-            if imagepath is not None:
-                anchor = buffer_.create_child_anchor(end_iter)
-                img = TextViewImage(anchor, special_text)
-                img.set_from_file(imagepath)
-                img.show()
-                # add
-                self.tv.add_child_at_anchor(img, anchor)
-                # delete old file
-                try:
-                    os.remove(imagepath)
-                except Exception:
-                    pass
-            else:
-                buffer_.insert(end_iter, special_text)
-            use_other_tags = False
         else:
             # It's nothing special
             if use_other_tags:
-                end_iter = buffer_.get_end_iter()
                 insert_tags_func = buffer_.insert_with_tags_by_name
                 if other_tags and isinstance(other_tags[0], gtk.TextTag):
                     insert_tags_func = buffer_.insert_with_tags
@@ -1184,7 +1196,6 @@ class ConversationTextview(gobject.GObject):
                 insert_tags_func(end_iter, special_text, *other_tags)
 
         if tags:
-            end_iter = buffer_.get_end_iter()
             all_tags = tags[:]
             if use_other_tags:
                 all_tags += other_tags
@@ -1194,8 +1205,11 @@ class ConversationTextview(gobject.GObject):
             if 'url' in tags:
                 puny_text = puny_encode(special_text)
                 if not puny_text.endswith('-'):
-                    end_iter = buffer_.get_end_iter()
-                    buffer_.insert(end_iter, " (%s)" % puny_text)
+                    puny_tags = []
+                    if use_other_tags:
+                        puny_tags += other_tags
+                    puny_tags = [(ttt.lookup(t) if isinstance(t, str) else t) for t in puny_tags]
+                    buffer_.insert_with_tags(end_iter, " (%s)" % puny_text, *puny_tags)
 
     def print_empty_line(self):
         buffer_ = self.tv.get_buffer()
@@ -1204,14 +1218,16 @@ class ConversationTextview(gobject.GObject):
         self.just_cleared = False
 
     def print_conversation_line(self, text, jid, kind, name, tim,
-                    other_tags_for_name=[], other_tags_for_time=[],
-                    other_tags_for_text=[], subject=None, old_kind=None, xhtml=None,
-                    simple=False, graphics=True, displaymarking=None):
+    other_tags_for_name=[], other_tags_for_time=[], other_tags_for_text=[],
+    subject=None, old_kind=None, xhtml=None, simple=False, graphics=True,
+    displaymarking=None, iter_=None):
         """
         Print 'chat' type messages
         """
         buffer_ = self.tv.get_buffer()
         buffer_.begin_user_action()
+        if iter_:
+            temp_mark = buffer_.create_mark(None, iter_, left_gravity=True)
         if self.marks_queue.full():
             # remove oldest line
             m1 = self.marks_queue.get()
@@ -1220,7 +1236,11 @@ class ConversationTextview(gobject.GObject):
             i2 = buffer_.get_iter_at_mark(m2)
             buffer_.delete(i1, i2)
             buffer_.delete_mark(m1)
-        end_iter = buffer_.get_end_iter()
+        if iter_:
+            end_iter = buffer_.get_iter_at_mark(temp_mark)
+            buffer_.delete_mark(temp_mark)
+        else:
+            end_iter = buffer_.get_end_iter()
         end_offset = end_iter.get_offset()
         at_the_end = self.at_the_end()
         move_selection = False
@@ -1228,21 +1248,22 @@ class ConversationTextview(gobject.GObject):
         get_offset() == end_offset:
             move_selection = True
 
-        # Create one mark and add it to queue once if it's the first line
-        # else twice (one for end bound, one for start bound)
-        mark = None
-        if buffer_.get_char_count() > 0:
-            if not simple:
-                buffer_.insert_with_tags_by_name(end_iter, '\n', 'eol')
-                if move_selection:
-                    sel_start, sel_end = buffer_.get_selection_bounds()
-                    sel_end.backward_char()
-                    buffer_.select_range(sel_start, sel_end)
-            mark = buffer_.create_mark(None, end_iter, left_gravity=True)
+        if not iter_:
+            # Create one mark and add it to queue once if it's the first line
+            # else twice (one for end bound, one for start bound)
+            mark = None
+            if buffer_.get_char_count() > 0:
+                if not simple and not iter_:
+                    buffer_.insert_with_tags_by_name(end_iter, '\n', 'eol')
+                    if move_selection:
+                        sel_start, sel_end = buffer_.get_selection_bounds()
+                        sel_end.backward_char()
+                        buffer_.select_range(sel_start, sel_end)
+                mark = buffer_.create_mark(None, end_iter, left_gravity=True)
+                self.marks_queue.put(mark)
+            if not mark:
+                mark = buffer_.create_mark(None, end_iter, left_gravity=True)
             self.marks_queue.put(mark)
-        if not mark:
-            mark = buffer_.create_mark(None, end_iter, left_gravity=True)
-        self.marks_queue.put(mark)
         if kind == 'incoming_queue':
             kind = 'incoming'
         if old_kind == 'incoming_queue':
@@ -1252,14 +1273,22 @@ class ConversationTextview(gobject.GObject):
             # We don't have tim for outgoing messages...
             tim = time.localtime()
         current_print_time = gajim.config.get('print_time')
+        if text.startswith('/me '):
+            direction_mark = i18n.paragraph_direction_mark(unicode(text[3:]))
+        else:
+            direction_mark = i18n.paragraph_direction_mark(unicode(text))
+        # don't apply direction mark if it's status message
+        if kind == 'status':
+            direction_mark = i18n.direction_mark
         if current_print_time == 'always' and kind != 'info' and not simple:
-            timestamp_str = self.get_time_to_show(tim)
+            timestamp_str = self.get_time_to_show(tim, direction_mark)
             timestamp = time.strftime(timestamp_str, tim)
+            timestamp = direction_mark + timestamp + direction_mark
             buffer_.insert_with_tags_by_name(end_iter, timestamp,
-                    *other_tags_for_time)
+                *other_tags_for_time)
         elif current_print_time == 'sometimes' and kind != 'info' and not simple:
             every_foo_seconds = 60 * gajim.config.get(
-                    'print_ichat_every_foo_minutes')
+                'print_ichat_every_foo_minutes')
             seconds_passed = time.mktime(tim) - self.last_time_printout
             if seconds_passed > every_foo_seconds:
                 self.last_time_printout = time.mktime(tim)
@@ -1268,36 +1297,59 @@ class ConversationTextview(gobject.GObject):
                     ft = self.fc.fuzzy_time(gajim.config.get('print_time_fuzzy'), tim)
                     tim_format = ft.decode(locale.getpreferredencoding())
                 else:
-                    tim_format = self.get_time_to_show(tim)
+                    tim_format = self.get_time_to_show(tim, direction_mark)
                 buffer_.insert_with_tags_by_name(end_iter, tim_format + '\n',
                         'time_sometimes')
         # If there's a displaymarking, print it here.
         if displaymarking:
-            self.print_displaymarking(displaymarking)
+            self.print_displaymarking(displaymarking, iter_=end_iter)
         # kind = info, we print things as if it was a status: same color, ...
         if kind in ('error', 'info'):
             kind = 'status'
         other_text_tag = self.detect_other_text_tag(text, kind)
         text_tags = other_tags_for_text[:] # create a new list
+        mark1 = None
         if other_text_tag:
             # note that color of /me may be overwritten in gc_control
             text_tags.append(other_text_tag)
+            if text.startswith('/me') and not iter_:
+                mark1 = mark
         else: # not status nor /me
             if gajim.config.get('chat_merge_consecutive_nickname'):
                 if kind != old_kind or self.just_cleared:
-                    self.print_name(name, kind, other_tags_for_name)
+                    self.print_name(name, kind, other_tags_for_name,
+                        direction_mark=direction_mark, iter_=end_iter)
                 else:
                     self.print_real_text(gajim.config.get(
-                            'chat_merge_consecutive_nickname_indent'))
+                        'chat_merge_consecutive_nickname_indent'),
+                        iter_=end_iter)
             else:
-                self.print_name(name, kind, other_tags_for_name)
+                self.print_name(name, kind, other_tags_for_name,
+                    direction_mark=direction_mark, iter_=end_iter)
             if kind == 'incoming':
                 text_tags.append('incomingtxt')
+                if not iter_:
+                    mark1 = mark
             elif kind == 'outgoing':
                 text_tags.append('outgoingtxt')
-        self.print_subject(subject)
-        self.print_real_text(text, text_tags, name, xhtml, graphics=graphics)
-
+                if not iter_:
+                    mark1 = mark
+        self.print_subject(subject, iter_=end_iter)
+        self.print_real_text(text, text_tags, name, xhtml, graphics=graphics,
+            iter_=end_iter)
+        if not iter_ and mark1:
+            mark2 = buffer_.create_mark(None, buffer_.get_end_iter(),
+                left_gravity=True)
+            if kind == 'incoming':
+                if name in self.last_received_message_marks:
+                    m = self.last_received_message_marks[name][1]
+                    buffer_.delete_mark(m)
+                self.last_received_message_marks[name] = [mark1, mark2]
+            elif kind == 'outgoing':
+                m = self.last_sent_message_marks[1]
+                if m:
+                    buffer_.delete_mark(m)
+                self.last_sent_message_marks = [mark1, mark2]
         # scroll to the end of the textview
         if at_the_end or kind == 'outgoing':
             # we are at the end or we are sending something
@@ -1309,8 +1361,9 @@ class ConversationTextview(gobject.GObject):
 
         self.just_cleared = False
         buffer_.end_user_action()
+        return end_iter
 
-    def get_time_to_show(self, tim):
+    def get_time_to_show(self, tim, direction_mark=''):
         """
         Get the time, with the day before if needed and return it. It DOESN'T
         format a fuzzy time
@@ -1329,7 +1382,7 @@ class ConversationTextview(gobject.GObject):
                 '%(nb_days)i days ago', diff_day, {'nb_days': diff_day},
                 {'nb_days': diff_day})
         if day_str:
-            format_ += day_str + ' '
+            format_ += i18n.direction_mark + day_str + direction_mark + ' '
         timestamp_str = gajim.config.get('time_stamp')
         timestamp_str = helpers.from_one_line(timestamp_str)
         format_ += timestamp_str
@@ -1346,42 +1399,52 @@ class ConversationTextview(gobject.GObject):
         elif text.startswith('/me ') or text.startswith('/me\n'):
             return kind
 
-    def print_displaymarking(self, displaymarking):
+    def print_displaymarking(self, displaymarking, iter_=None):
         bgcolor = displaymarking.getAttr('bgcolor') or '#FFF'
         fgcolor = displaymarking.getAttr('fgcolor') or '#000'
         text = displaymarking.getData()
         if text:
             buffer_ = self.tv.get_buffer()
-            end_iter = buffer_.get_end_iter()
+            if iter_:
+                end_iter = iter_
+            else:
+                end_iter = buffer_.get_end_iter()
             tag = self.displaymarking_tags.setdefault(bgcolor + '/' + fgcolor,
                 buffer_.create_tag(None, background=bgcolor, foreground=fgcolor))
             buffer_.insert_with_tags(end_iter, '[' + text + ']', tag)
             end_iter = buffer_.get_end_iter()
             buffer_.insert_with_tags(end_iter, ' ')
 
-    def print_name(self, name, kind, other_tags_for_name):
+    def print_name(self, name, kind, other_tags_for_name, direction_mark='',
+    iter_=None):
         if name:
             buffer_ = self.tv.get_buffer()
-            end_iter = buffer_.get_end_iter()
+            if iter_:
+                end_iter = iter_
+            else:
+                end_iter = buffer_.get_end_iter()
             name_tags = other_tags_for_name[:] # create a new list
             name_tags.append(kind)
             before_str = gajim.config.get('before_nickname')
             before_str = helpers.from_one_line(before_str)
             after_str = gajim.config.get('after_nickname')
             after_str = helpers.from_one_line(after_str)
-            format = before_str + name + after_str + ' '
-            buffer_.insert_with_tags_by_name(end_iter, format, *name_tags)
+            format_ = before_str + name + direction_mark + after_str + ' '
+            buffer_.insert_with_tags_by_name(end_iter, format_, *name_tags)
 
-    def print_subject(self, subject):
+    def print_subject(self, subject, iter_=None):
         if subject: # if we have subject, show it too!
             subject = _('Subject: %s\n') % subject
             buffer_ = self.tv.get_buffer()
-            end_iter = buffer_.get_end_iter()
+            if iter_:
+                end_iter = iter_
+            else:
+                end_iter = buffer_.get_end_iter()
             buffer_.insert(end_iter, subject)
             self.print_empty_line()
 
     def print_real_text(self, text, text_tags=[], name=None, xhtml=None,
-                    graphics=True):
+    graphics=True, iter_=None):
         """
         Add normal and special text. call this to add text
         """
@@ -1389,7 +1452,8 @@ class ConversationTextview(gobject.GObject):
             try:
                 if name and (text.startswith('/me ') or text.startswith('/me\n')):
                     xhtml = xhtml.replace('/me', '<i>* %s</i>' % (name,), 1)
-                self.tv.display_html(xhtml.encode('utf-8'), self)
+                self.tv.display_html(xhtml.encode('utf-8'), self.tv, self,
+                    iter_=iter_)
                 return
             except Exception, e:
                 gajim.log.debug('Error processing xhtml' + str(e))
@@ -1400,4 +1464,5 @@ class ConversationTextview(gobject.GObject):
             text = '* ' + name + text[3:]
             text_tags.append('italic')
         # detect urls formatting and if the user has it on emoticons
-        self.detect_and_print_special_text(text, text_tags, graphics=graphics)
+        return self.detect_and_print_special_text(text, text_tags, graphics=graphics,
+            iter_=iter_)

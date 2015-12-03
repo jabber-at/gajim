@@ -5,7 +5,7 @@
 ##                    Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006-2007 Jean-Marie Traissard <jim AT lapin.org>
 ##                         Travis Shirk <travis AT pobox.com>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Julien Pivotto <roidelapluie AT gmail.com>
 ##                    Stephan Erb <steve-e AT h3c.de>
 ## Copyright (C) 2007-2008 Brendan Taylor <whateley AT gmail.com>
@@ -60,7 +60,6 @@ class MessageControl(object):
         self.resource = resource
 
         self.session = None
-        self.other_sessions = []
 
         gajim.last_message_time[self.account][self.get_full_jid()] = 0
 
@@ -203,10 +202,6 @@ class MessageControl(object):
 
         if oldsession:
             oldsession.control = None
-            self.other_sessions.append(oldsession)
-
-        if self.session in self.other_sessions:
-            self.other_sessions.remove(self.session)
 
         crypto_changed = bool(session and isinstance(session,
             EncryptedStanzaSession) and session.enable_encryption) != \
@@ -224,13 +219,8 @@ class MessageControl(object):
     def remove_session(self, session):
         if session != self.session:
             return
-        last_session = None
-        if self.other_sessions:
-            last_session = self.other_sessions.pop(0)
-        if session not in self.other_sessions:
-            self.other_sessions.append(session)
-        if last_session:
-            self.session = last_session
+        self.session.control = None
+        self.session = None
 
     def _nec_message_outgoing(self, obj):
         # Send the given message to the active tab.

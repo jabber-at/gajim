@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2005-2006 Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2007 Tomasz Melcer <liori AT exroot.org>
 ## Copyright (C) 2008 Jean-Marie Traissard <jim AT lapin.org>
@@ -266,6 +266,8 @@ def check_and_possibly_create_paths():
     MY_DATA = configpaths.gajimpaths['MY_DATA']
     MY_CONFIG = configpaths.gajimpaths['MY_CONFIG']
     MY_CACHE = configpaths.gajimpaths['MY_CACHE']
+    XTLS_CERTS = configpaths.gajimpaths['MY_PEER_CERTS']
+    LOCAL_XTLS_CERTS = configpaths.gajimpaths['MY_CERT']
 
     PLUGINS_CONFIG_PATH = gajim.PLUGINS_CONFIG_DIR
 
@@ -342,6 +344,11 @@ def check_and_possibly_create_paths():
         print _('%s is a directory but should be a file') % CACHE_DB_PATH
         print _('Gajim will now exit')
         sys.exit()
+        
+    if not os.path.exists(XTLS_CERTS):
+        create_path(XTLS_CERTS)
+    if not os.path.exists(LOCAL_XTLS_CERTS):
+        create_path(LOCAL_XTLS_CERTS)
 
 def create_path(directory):
     head, tail = os.path.split(directory)

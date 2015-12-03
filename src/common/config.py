@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/config.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004-2005 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005 Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
@@ -65,7 +65,7 @@ class Config:
     DEFAULT_MAILAPP = 'mozilla-thunderbird -compose'
     DEFAULT_FILE_MANAGER = 'xffm'
 
-    __options = {
+    __options = ({
             # name: [ type, default_value, help_string ]
             'verbose': [ opt_bool, False, '', True ],
             'autopopup': [ opt_bool, False ],
@@ -80,10 +80,10 @@ class Config:
             'show_transports_group': [ opt_bool, True ],
             'autoaway': [ opt_bool, True ],
             'autoawaytime': [ opt_int, 5, _('Time in minutes, after which your status changes to away.') ],
-            'autoaway_message': [ opt_str, _('$S (Away as a result of being idle more than $T min)'), _('$S will be replaced by current status message, $T by autoaway time.') ],
+            'autoaway_message': [ opt_str, _('$S (Away as a result of being idle more than $T min)'), _('$S will be replaced by current status message, $T by autoawaytime.') ],
             'autoxa': [ opt_bool, True ],
             'autoxatime': [ opt_int, 15, _('Time in minutes, after which your status changes to not available.') ],
-            'autoxa_message': [ opt_str, _('$S (Not available as a result of being idle more than $T min)'), _('$S will be replaced by current status message, $T by autoxa time.') ],
+            'autoxa_message': [ opt_str, _('$S (Not available as a result of being idle more than $T min)'), _('$S will be replaced by current status message, $T by autoxatime.') ],
             'ask_online_status': [ opt_bool, False ],
             'ask_offline_status': [ opt_bool, False ],
             'trayicon': [opt_str, 'always', _("When to show notification area icon. Can be 'never', 'on_event', 'always'."), False],
@@ -99,6 +99,15 @@ class Config:
             'statusmsgcolor': [ opt_color, '#4e9a06', _('Status message text color.'), True ],
             'markedmsgcolor': [ opt_color, '#ff8080', '', True ],
             'urlmsgcolor': [ opt_color, '#204a87', '', True ],
+            'notif_signin_color': [ opt_color, '#32CD32', _('Contact signed in notification color.') ], # limegreen
+            'notif_signout_color': [ opt_color, '#FF0000', _('Contact signout notification color') ], # red
+            'notif_message_color': [ opt_color, '#1E90FF', _('New message/email notification color.') ], # dodgerblue
+            'notif_ftrequest_color': [ opt_color, '#F0E68C', _('File transfer request notification color.') ], # khaki
+            'notif_fterror_color': [ opt_color, '#B22222', _('File transfer error notification color.') ], # firebrick
+            'notif_ftcomplete_color': [ opt_color, '#9ACD32', _('File transfer complete or stopped notification color.') ], # yellowgreen
+            'notif_invite_color': [ opt_color, '#D2B48C', _('Groupchat invitation notification color') ], # tan1
+            'notif_status_color': [ opt_color, '#D8BFD8', _('Status changed notification background color') ], # thistle2
+            'notif_other_color': [ opt_color, '#FFFFFF', _('Other dialogs color.') ], # white
             'inmsgfont': [ opt_str, '', _('Incoming nickname font.'), True ],
             'outmsgfont': [ opt_str, '', _('Outgoing nickname font.'), True ],
             'inmsgtxtfont': [ opt_str, '', _('Incoming text font.'), True ],
@@ -148,11 +157,12 @@ class Config:
             'single-msg-y-position': [opt_int, 0],
             'single-msg-width': [opt_int, 400],
             'single-msg-height': [opt_int, 280],
-            'save-roster-position': [opt_bool, True, _('If true, Gajim will save roster position when hiding roster, and restore it when showing roster.')],
+            'save-roster-position': [opt_bool, True, _('If True, Gajim will save roster position when hiding roster, and restore it when showing roster.')],
             'roster_x-position': [ opt_int, 0 ],
             'roster_y-position': [ opt_int, 0 ],
             'roster_width': [ opt_int, 200 ],
             'roster_height': [ opt_int, 400 ],
+            'roster_hpaned_position': [opt_int, 200],
             'history_window_width': [ opt_int, 650 ],
             'history_window_height': [ opt_int, 450 ],
             'history_window_x-position': [ opt_int, 0 ],
@@ -167,10 +177,10 @@ class Config:
             'notify_on_new_gmail_email_command': [ opt_str, '', _('Specify the command to run when new mail arrives, e.g.: /usr/bin/getmail -q') ],
             'use_gpg_agent': [ opt_bool, False ],
             'change_roster_title': [ opt_bool, True, _('Add * and [n] in roster title?')],
-            'restore_lines': [opt_int, 4, _('How many lines to remember from previous conversation when a chat tab/window is reopened.')],
+            'restore_lines': [opt_int, 4, _('How many lines to remember from previous conversation when a chat tab/window is reopened?')],
             'restore_timeout': [opt_int, 60, _('How many minutes should last lines from previous conversation last.')],
-            'muc_restore_lines': [opt_int, 20, _('How many lines to request to server when entering a groupchat. -1 means no limit')],
-            'muc_restore_timeout': [opt_int, 60, _('How many minutes back to request logs when a entering a groupchat. -1 means no limit')],
+            'muc_restore_lines': [opt_int, 20, _('How many lines to request from server when entering a groupchat. -1 means no limit')],
+            'muc_restore_timeout': [opt_int, 60, _('How many minutes back to request logs when entering a groupchat. -1 means no limit')],
             'muc_autorejoin_timeout': [opt_int, 1, _('How many seconds to wait before trying to autorejoin to a conference you are being disconnected from. Set to 0 to disable autorejoining.')],
             'muc_autorejoin_on_kick': [opt_bool, False, _('Should autorejoin be activated when we are being kicked from a conference?')],
             'send_on_ctrl_enter': [opt_bool, False, _('Send message on Ctrl+Enter and with Enter make new line (Mirabilis ICQ Client default behaviour).')],
@@ -181,16 +191,16 @@ class Config:
             'dictionary_url': [opt_str, 'WIKTIONARY', _("Either custom url with %s in it where %s is the word/phrase or 'WIKTIONARY' which means use wiktionary.")],
             'always_english_wikipedia': [opt_bool, False],
             'always_english_wiktionary': [opt_bool, True],
-            'remote_control': [opt_bool, True, _('If checked, Gajim can be controlled remotely using gajim-remote.'), True],
+            'remote_control': [opt_bool, False, _('If checked, Gajim can be controlled remotely using gajim-remote.'), True],
             'networkmanager_support': [opt_bool, True, _('If True, listen to D-Bus signals from NetworkManager and change the status of accounts (provided they do not have listen_to_network_manager set to False and they sync with global status) based upon the status of the network connection.'), True],
             'outgoing_chat_state_notifications': [opt_str, 'all', _('Sent chat state notifications. Can be one of all, composing_only, disabled.')],
             'displayed_chat_state_notifications': [opt_str, 'all', _('Displayed chat state notifications in chat windows. Can be one of all, composing_only, disabled.')],
             'autodetect_browser_mailer': [opt_bool, True, '', True],
             'print_ichat_every_foo_minutes': [opt_int, 5, _('When not printing time for every message (print_time==sometimes), print it every x minutes.')],
             'confirm_close_muc': [opt_bool, True, _('Ask before closing a group chat tab/window.')],
-            'confirm_close_muc_rooms': [opt_str, '', _('Always ask before closing group chat tab/window in this space separated list of group chat jids.')],
-            'noconfirm_close_muc_rooms': [opt_str, '', _('Never ask before closing group chat tab/window in this space separated list of group chat jids.')],
-            'confirm_close_multiple_tabs': [opt_bool, True, _('Ask before closing tabbed chat window if there are control that can loose data (chat, private chat, groupchat that will not be minimized)')],
+            'confirm_close_muc_rooms': [opt_str, '', _('Always ask before closing group chat tab/window in this space separated list of group chat JIDs.')],
+            'noconfirm_close_muc_rooms': [opt_str, '', _('Never ask before closing group chat tab/window in this space separated list of group chat JIDs.')],
+            'confirm_close_multiple_tabs': [opt_bool, True, _('Ask before closing tabbed chat window if there are controls that can lose data (chat, private chat, groupchat that will not be minimized)')],
             'notify_on_file_complete': [opt_bool, True],
             'file_transfers_port': [opt_int, 28011],
             'ft_add_hosts_to_send': [opt_str, '', _('Comma separated list of hosts that we send, in addition of local interfaces, for File Transfer in case of address translation/port forwarding.')],
@@ -198,6 +208,7 @@ class Config:
             'use_kib_mib': [opt_bool, False, _('IEC standard says KiB = 1024 bytes, KB = 1000 bytes.')],
             'notify_on_all_muc_messages': [opt_bool, False],
             'trayicon_notification_on_events': [opt_bool, True, _('Notify of events in the notification area.')],
+            'trayicon_blink': [opt_bool, True, _('If False, Gajim will display a static event icon instead of the blinking status icon in the notification area when notifying on event.')],
             'last_save_dir': [opt_str, ''],
             'last_send_dir': [opt_str, ''],
             'last_emoticons_dir': [opt_str, ''],
@@ -206,7 +217,7 @@ class Config:
             'tabs_always_visible': [opt_bool, False, _('Show tab when only one conversation?')],
             'tabs_border': [opt_bool, False, _('Show tabbed notebook border in chat windows?')],
             'tabs_close_button': [opt_bool, True, _('Show close button in tab?')],
-            'esession_modp': [opt_str, '5,14', _('A list of modp groups to use in a Diffie-Hellman, highest preference first, separated by commas. Valid groups are 1, 2, 5, 14, 15, 16, 17 and 18. Higher numbers are more secure, but take longer to calculate when you start a session.')],
+            'esession_modp': [opt_str, '15,16,14', _('A list of modp groups to use in a Diffie-Hellman, highest preference first, separated by commas. Valid groups are 1, 2, 5, 14, 15, 16, 17 and 18. Higher numbers are more secure, but take longer to calculate when you start a session.')],
             'chat_avatar_width': [opt_int, 52],
             'chat_avatar_height': [opt_int, 52],
             'roster_avatar_width': [opt_int, 32],
@@ -245,7 +256,7 @@ class Config:
             'avatar_position_in_roster': [opt_str, 'right', _('Define the position of the avatar in roster. Can be left or right'), True],
             'ask_avatars_on_startup': [opt_bool, True, _('If True, Gajim will ask for avatar each contact that did not have an avatar last time or has one cached that is too old.')],
             'print_status_in_chats': [opt_bool, True, _('If False, Gajim will no longer print status line in chats when a contact changes his or her status and/or his or her status message.')],
-            'print_status_in_muc': [opt_str, 'in_and_out', _('can be "none", "all" or "in_and_out". If "none", Gajim will no longer print status line in groupchats when a member changes his or her status and/or his or her status message. If "all" Gajim will print all status messages. If "in_and_out", Gajim will only print FOO enters/leaves group chat.')],
+            'print_status_in_muc': [opt_str, 'in_and_out', _('Can be "none", "all" or "in_and_out". If "none", Gajim will no longer print status line in groupchats when a member changes his or her status and/or his or her status message. If "all" Gajim will print all status messages. If "in_and_out", Gajim will only print FOO enters/leaves group chat.')],
             'log_contact_status_changes': [opt_bool, False],
             'log_xhtml_messages': [opt_bool, False, _('Log XHTML messages instead of plain text messages.')],
             'just_connected_bg_color': [opt_str, '#adc3c6', _('Background color of contacts when they just signed in.')],
@@ -259,7 +270,7 @@ class Config:
             'send_sha_in_gc_presence': [opt_bool, True, _('Jabberd1.4 does not like sha info when one join a password protected group chat. Turn this option to False to stop sending sha info in group chat presences.')],
             'one_message_window': [opt_str, 'always',
 #always, never, peracct, pertype should not be translated
-                    _('Controls the window where new messages are placed.\n\'always\' - All messages are sent to a single window.\n\'always_with_roster\' - Like \'always\' but the messages are in a single window along with the roster.\n\'never\' - All messages get their own window.\n\'peracct\' - Messages for each account are sent to a specific window.\n\'pertype\' - Each message type (e.g., chats vs. groupchats) are sent to a specific window.')],
+                    _('Controls the window where new messages are placed.\n\'always\' - All messages are sent to a single window.\n\'always_with_roster\' - Like \'always\' but the messages are in a single window along with the roster.\n\'never\' - All messages get their own window.\n\'peracct\' - Messages for each account are sent to a specific window.\n\'pertype\' - Each message type (e.g. chats vs. groupchats) is sent to a specific window.')],
             'show_roster_on_startup':[opt_str, 'always', _('Show roster on startup.\n\'always\' - Always show roster.\n\'never\' - Never show roster.\n\'last_state\' - Restore the last state roster.')],
             'show_avatar_in_chat': [opt_bool, True, _('If False, you will no longer see the avatar in the chat window.')],
             'escape_key_closes': [opt_bool, True, _('If True, pressing the escape key closes a tab/window.')],
@@ -281,14 +292,12 @@ class Config:
             'show_contacts_number': [opt_bool, True, _('If True, Gajim will show number of online and total contacts in account and group rows.')],
             'treat_incoming_messages': [ opt_str, '', _('Can be empty, \'chat\' or \'normal\'. If not empty, treat all incoming messages as if they were of this type')],
             'scroll_roster_to_last_message': [opt_bool, True, _('If True, Gajim will scroll and select the contact who sent you the last message, if chat window is not already opened.')],
-            'use_latex': [opt_bool, False, _('If True, Gajim will convert string between $$ and $$ to an image using dvips and convert before insterting it in chat window.')],
             'change_status_window_timeout': [opt_int, 15, _('Time of inactivity needed before the change status window closes down.')],
             'max_conversation_lines': [opt_int, 500, _('Maximum number of lines that are printed in conversations. Oldest lines are cleared.')],
             'attach_notifications_to_systray': [opt_bool, False, _('If True, notification windows from notification-daemon will be attached to notification icon.')],
             'check_idle_every_foo_seconds': [opt_int, 2, _('Choose interval between 2 checks of idleness.')],
-            'latex_png_dpi': [opt_str, '108', _('Change the value to change the size of latex formulas displayed. The higher is larger.') ],
             'uri_schemes': [opt_str, 'aaa:// aaas:// acap:// cap:// cid: crid:// data: dav: dict:// dns: fax: file:/ ftp:// geo: go: gopher:// h323: http:// https:// iax: icap:// im: imap:// info: ipp:// iris: iris.beep: iris.xpc: iris.xpcs: iris.lwz: ldap:// mid: modem: msrp:// msrps:// mtqp:// mupdate:// news: nfs:// nntp:// opaquelocktoken: pop:// pres: prospero:// rtsp:// service: shttp:// sip: sips: sms: snmp:// soap.beep:// soap.beeps:// tag: tel: telnet:// tftp:// thismessage:/ tip:// tv: urn:// vemmi:// xmlrpc.beep:// xmlrpc.beeps:// z39.50r:// z39.50s:// about: apt: cvs:// daap:// ed2k:// feed: fish:// git:// iax2: irc:// ircs:// ldaps:// magnet: mms:// rsync:// ssh:// svn:// sftp:// smb:// webcal://', _('Valid uri schemes. Only schemes in this list will be accepted as "real" uri. (mailto and xmpp are handled separately)'), True],
-            'ask_offline_status_on_connection': [ opt_bool, False, _('Ask offline status message to all offline contacts when connection to an accoutn is established. WARNING: This causes a lot of requests to be sent!') ],
+            'ask_offline_status_on_connection': [ opt_bool, False, _('Ask offline status message to all offline contacts when connection to an account is established. WARNING: This causes a lot of requests to be sent!') ],
             'shell_like_completion': [ opt_bool, False, _('If True, completion in groupchats will be like a shell auto-completion')],
             'show_self_contact': [opt_str, 'when_other_resource', _('When is self contact row displayed. Can be "always", "when_other_resource" or "never"'), True],
             'audio_input_device': [opt_str, 'autoaudiosrc ! volume name=gajim_vol'],
@@ -297,13 +306,17 @@ class Config:
             'video_output_device': [opt_str, 'autovideosink'],
             'video_framerate': [opt_str, '', _('Optionally fix jingle output video framerate. Example: 10/1 or 25/2')],
             'video_size': [opt_str, '', _('Optionally resize jingle output video. Example: 320x240')],
+            'video_see_self': [opt_bool, True, _('If True, You will also see your webcam')],
             'audio_input_volume': [opt_int, 50],
             'audio_output_volume': [opt_int, 50],
             'use_stun_server': [opt_bool, False, _('If True, Gajim will try to use a STUN server when using jingle. The one in "stun_server" option, or the one given by the jabber server.')],
             'stun_server': [opt_str, '', _('STUN server to use when using jingle')],
             'show_affiliation_in_groupchat': [opt_bool, True, _('If True, Gajim will show affiliation of groupchat occupants by adding a colored square to the status icon')],
             'global_proxy': [opt_str, '', _('Proxy used for all outgoing connections if the account does not have a specific proxy configured')],
-    }
+            'ignore_incoming_attention': [opt_bool, False, _('If True, Gajim will ignore incoming attention requestd ("wizz").')],
+            'remember_opened_chat_controls': [ opt_bool, True, _('If enabled, Gajim will reopen chat windows that were opened last time Gajim was closed.')],
+            'positive_184_ack': [ opt_bool, False, _('If enabled, Gajim will show an icon to show that sent message has been received by your contact')],
+    }, {})
 
     __options_per_key = {
             'accounts': ({
@@ -336,6 +349,9 @@ class Config:
                     'enable_esessions': [opt_bool, True, _('Enable ESessions encryption for this account.')],
                     'autonegotiate_esessions': [opt_bool, True, _('Should Gajim automatically start an encrypted session when possible?')],
                     'connection_types': [ opt_str, 'tls ssl plain', _('Ordered list (space separated) of connection type to try. Can contain tls, ssl or plain')],
+                    'tls_version': [ opt_str, '1.0', '' ],
+                    'cipher_list': [ opt_str, 'HIGH:!aNULL:RC4-SHA', '' ],
+                    'authentication_mechanisms': [ opt_str, '', _('List (space separated) of authentication mechanisms to try. Can contain ANONYMOUS, EXTERNAL, GSSAPI, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, DIGEST-MD5, PLAIN, X-MESSENGER-OAUTH2 or XEP-0078') ],
                     'action_when_plaintext_connection': [ opt_str, 'warn', _('Show a warning dialog before sending password on an plaintext connection. Can be \'warn\', \'connect\', \'disconnect\'') ],
                     'warn_when_insecure_ssl_connection': [ opt_bool, True, _('Show a warning dialog before using standard SSL library.') ],
                     'warn_when_insecure_password': [ opt_bool, True, _('Show a warning dialog before sending PLAIN password over a plain connection.') ],
@@ -355,7 +371,7 @@ class Config:
                     # send keepalive every N seconds of inactivity
                     'keep_alive_every_foo_secs': [ opt_int, 55 ],
                     'ping_alive_every_foo_secs': [ opt_int, 120 ],
-                    'time_for_ping_alive_answer': [ opt_int, 60, _('How many seconds to wait for the answer of ping alive packet before we try to reconnect.') ],
+                    'time_for_ping_alive_answer': [ opt_int, 60, _('How many seconds to wait for the answer of ping alive packet before we try to reconnect?') ],
                     # try for 1 minutes before giving up (aka. timeout after those seconds)
                     'try_connecting_for_foo_secs': [ opt_int, 60 ],
                     'http_auth': [opt_str, 'ask'], # yes, no, ask
@@ -396,6 +412,10 @@ class Config:
                     'last_archiving_time': [opt_str, '1970-01-01T00:00:00Z', _('Last time we syncronized with logs from server.')],
                     'enable_message_carbons': [ opt_bool, False, _('If enabled and if server supports this feature, Gajim will receive messages sent and received by other resources.')],
                     'ft_send_local_ips': [ opt_bool, True, _('If enabled, Gajim will send your local IPs so your contact can connect to your machine to transfer files.')],
+                    'oauth2_refresh_token': [ opt_str, '', _('Latest token for Oauth2 authentication.')],
+                    'oauth2_client_id': [ opt_str, '0000000044077801', _('client_id for Oauth2 authentication.')],
+                    'oauth2_redirect_url': [ opt_str, 'https%3A%2F%2Fgajim.org%2Fmsnauth%2Findex.cgi', _('redirect_url for Oauth2 authentication.')],
+                    'opened_chat_controls': [opt_str, '', _('Space separated list of JIDs for which we want to re-open a chat window on next startup.')],
             }, {}),
             'statusmsg': ({
                     'message': [ opt_str, '' ],
@@ -464,10 +484,10 @@ class Config:
             'rooms': ({
                     'speller_language': [ opt_str, '', _('Language for which we want to check misspelled words')],
                     'muc_restore_lines': [opt_int, -2, _('How many lines to request from server when entering a groupchat. -1 means no limit, -2 means global value')],
-                    'muc_restore_timeout': [opt_int, -2, _('How many minutes back to request logs when a entering a groupchat. -1 means no limit, -2 means global value')],
+                    'muc_restore_timeout': [opt_int, -2, _('How many minutes back to request logs when entering a groupchat. -1 means no limit, -2 means global value')],
             }, {}),
             'plugins': ({
-                'active': [opt_bool, False, _('State whether plugins should be activated on exit (this is saved on Gajim exit). This option SHOULD NOT be used to (de)activate plug-ins. Use GUI instead.')],
+                'active': [opt_bool, False, _('State whether plugins should be activated on startup (this is saved on Gajim exit). This option SHOULD NOT be used to (de)activate plug-ins. Use GUI instead.')],
             },{}),
     }
 
@@ -499,6 +519,7 @@ class Config:
     }
 
     soundevents_default = {
+            'attention_received': [True, 'attention.wav'],
             'first_message_received': [ True, 'message1.wav' ],
             'next_message_received_focused': [ True, 'message2.wav' ],
             'next_message_received_unfocused': [ True, 'message2.wav' ],
@@ -537,9 +558,9 @@ class Config:
         _('Tor'): ['socks5', 'localhost', 9050],
     }
 
-    def foreach(self, cb, data = None):
-        for opt in self.__options:
-            cb(data, opt, None, self.__options[opt])
+    def foreach(self, cb, data=None):
+        for opt in self.__options[1]:
+            cb(data, opt, None, self.__options[1][opt])
         for opt in self.__options_per_key:
             cb(data, opt, None, None)
             dict_ = self.__options_per_key[opt][1]
@@ -553,7 +574,7 @@ class Config:
         Tree-like interface
         """
         if node is None:
-            for child, option in self.__options.iteritems():
+            for child, option in self.__options[1].iteritems():
                 yield (child, ), option
             for grandparent in self.__options_per_key:
                 yield (grandparent, ), None
@@ -609,36 +630,45 @@ class Config:
                 return None
 
     def set(self, optname, value):
-        if optname not in self.__options:
+        if optname not in self.__options[1]:
 #                       raise RuntimeError, 'option %s does not exist' % optname
             return
-        opt = self.__options[optname]
-        value = self.is_valid(opt[OPT_TYPE], value)
+        value = self.is_valid(self.__options[0][optname][OPT_TYPE], value)
         if value is None:
 #                       raise RuntimeError, 'value of %s cannot be None' % optname
             return
 
-        opt[OPT_VAL] = value
+        self.__options[1][optname] = value
         self._timeout_save()
 
-    def get(self, optname = None):
+    def get(self, optname=None):
         if not optname:
-            return self.__options.keys()
-        if optname not in self.__options:
+            return self.__options[1].keys()
+        if optname not in self.__options[1]:
             return None
-        return self.__options[optname][OPT_VAL]
+        return self.__options[1][optname]
+
+    def get_default(self, optname):
+        if optname not in self.__options[0]:
+            return None
+        return self.__options[0][optname][OPT_VAL]
+
+    def get_type(self, optname):
+        if optname not in self.__options[0]:
+            return None
+        return self.__options[0][optname][OPT_TYPE][0]
 
     def get_desc(self, optname):
-        if optname not in self.__options:
+        if optname not in self.__options[0]:
             return None
-        if len(self.__options[optname]) > OPT_DESC:
-            return self.__options[optname][OPT_DESC]
+        if len(self.__options[0][optname]) > OPT_DESC:
+            return self.__options[0][optname][OPT_DESC]
 
     def get_restart(self, optname):
-        if optname not in self.__options:
+        if optname not in self.__options[0]:
             return None
-        if len(self.__options[optname]) > OPT_RESTART:
-            return self.__options[optname][OPT_RESTART]
+        if len(self.__options[0][optname]) > OPT_RESTART:
+            return self.__options[0][optname][OPT_RESTART]
 
     def add_per(self, typename, name): # per_group_of_option
         if typename not in self.__options_per_key:
@@ -649,7 +679,9 @@ class Config:
         if name in opt[1]:
             # we already have added group name before
             return 'you already have added %s before' % name
-        opt[1][name] = copy.deepcopy(opt[0])
+        opt[1][name] = {}
+        for o in opt[0]:
+            opt[1][name][o] = opt[0][o][OPT_VAL]
         self._timeout_save()
 
     def del_per(self, typename, name, subname = None): # per_group_of_option
@@ -679,37 +711,51 @@ class Config:
         if subname not in obj:
 #                       raise RuntimeError, '%s is not a key of %s' % (subname, obj)
             return
-        subobj = obj[subname]
-        value = self.is_valid(subobj[OPT_TYPE], value)
+        typ = self.__options_per_key[optname][0][subname][OPT_TYPE]
+        value = self.is_valid(typ, value)
         if value is None:
 #                       raise RuntimeError, '%s of %s cannot be None' % optname
             return
-        subobj[OPT_VAL] = value
+        obj[subname] = value
         self._timeout_save()
 
-    def get_per(self, optname, key = None, subname = None): # per_group_of_option
+    def get_per(self, optname, key=None, subname=None): # per_group_of_option
         if optname not in self.__options_per_key:
             return None
         dict_ = self.__options_per_key[optname][1]
         if not key:
             return dict_.keys()
         if key not in dict_:
-            if optname in self.__options_per_key \
-            and subname in self.__options_per_key[optname][0]:
-                return self.__options_per_key \
-                        [optname][0][subname][1]
+            if subname in self.__options_per_key[optname][0]:
+                return self.__options_per_key[optname][0][subname][1]
             return None
         obj = dict_[key]
         if not subname:
             return obj
         if subname not in obj:
             return None
-        return obj[subname][OPT_VAL]
+        return obj[subname]
 
-    def get_desc_per(self, optname, key = None, subname = None):
+    def get_default_per(self, optname, subname):
         if optname not in self.__options_per_key:
             return None
-        dict_ = self.__options_per_key[optname][1]
+        dict_ = self.__options_per_key[optname][0]
+        if subname not in dict_:
+            return None
+        return dict_[subname][OPT_VAL]
+
+    def get_type_per(self, optname, subname):
+        if optname not in self.__options_per_key:
+            return None
+        dict_ = self.__options_per_key[optname][0]
+        if subname not in dict_:
+            return None
+        return dict_[subname][OPT_TYPE][0]
+
+    def get_desc_per(self, optname, key=None, subname=None):
+        if optname not in self.__options_per_key:
+            return None
+        dict_ = self.__options_per_key[optname][0]
         if not key:
             return None
         if key not in dict_:
@@ -723,10 +769,10 @@ class Config:
             return obj[subname][OPT_DESC]
         return None
 
-    def get_restart_per(self, optname, key = None, subname = None):
+    def get_restart_per(self, optname, key=None, subname=None):
         if optname not in self.__options_per_key:
             return False
-        dict_ = self.__options_per_key[optname][1]
+        dict_ = self.__options_per_key[optname][0]
         if not key:
             return False
         if key not in dict_:
@@ -753,6 +799,10 @@ class Config:
 
         return (account not in no_log_for) and (jid not in no_log_for)
 
+    def _init_options(self):
+        for opt in self.__options[0]:
+            self.__options[1][opt] = self.__options[0][opt][OPT_VAL]
+
     def _really_save(self):
         from common import gajim
         if gajim.interface:
@@ -767,6 +817,7 @@ class Config:
 
     def __init__(self):
         #init default values
+        self._init_options()
         self.save_timeout_id = None
         for event in self.soundevents_default:
             default = self.soundevents_default[event]
