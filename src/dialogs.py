@@ -2362,6 +2362,7 @@ class JoinGroupchatWindow:
         this means room must be automaticaly configured and when done, invities
         must be automatically invited
         """
+        self.window_account = None
         if account:
             if room_jid != '' and room_jid in gajim.gc_connected[account] and \
             gajim.gc_connected[account][room_jid]:
@@ -2373,6 +2374,7 @@ class JoinGroupchatWindow:
                 ErrorDialog(_('You are not connected to the server'),
                     _('You can not join a group chat unless you are connected.'))
                 raise GajimGeneralException, 'You must be connected to join a groupchat'
+            self.window_account = account
 
         self.xml = gtkgui_helpers.get_gtk_builder('join_groupchat_window.ui')
 
@@ -2492,9 +2494,10 @@ class JoinGroupchatWindow:
             self._nec_agent_info_received)
         gajim.ged.register_event_handler('agent-info-error-received', ged.GUI1,
             self._nec_agent_info_error_received)
-        if self.account and 'join_gc' in gajim.interface.instances[self.account]:
+        if self.window_account and 'join_gc' in gajim.interface.instances[
+        self.window_account]:
             # remove us from open windows
-            del gajim.interface.instances[self.account]['join_gc']
+            del gajim.interface.instances[self.window_account]['join_gc']
 
     def on_join_groupchat_window_key_press_event(self, widget, event):
         if event.keyval == gtk.keysyms.Escape: # ESCAPE
@@ -2510,11 +2513,16 @@ class JoinGroupchatWindow:
             if not self._empty_required_widgets and self.account:
                 self.xml.get_object('join_button').set_sensitive(True)
             text = self._room_jid_entry.get_text()
+            if widget == self._room_jid_entry and text.startswith('xmpp:'):
+                text = text[5:]
+                self._room_jid_entry.set_text(text)
             if widget == self._room_jid_entry and '@' in text:
                 # Don't allow @ char in room entry
                 room_jid, server = text.split('@', 1)
                 self._room_jid_entry.set_text(room_jid)
                 if server:
+                    if '?' in server:
+                        server = server.split('?')[0]
                     self.server_comboboxentry.child.set_text(server)
                 self.server_comboboxentry.grab_focus()
 
@@ -2652,7 +2660,7 @@ class JoinGroupchatWindow:
             # Add as bookmark, with autojoin and not minimized
             name = gajim.get_nick_from_jid(room_jid)
             gajim.interface.add_gc_bookmark(self.account, name, room_jid,
-                autojoin, '0', password, nickname)
+                autojoin, autojoin, password, nickname)
 
         if self.automatic:
             gajim.automatic_rooms[self.account][room_jid] = self.automatic

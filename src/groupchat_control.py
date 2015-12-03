@@ -1613,13 +1613,13 @@ class GroupchatControl(ChatControlBase):
                 gajim.automatic_rooms[self.account][self.room_jid]['invities']:
                     if self.room_jid not in gajim.interface.instances[
                     self.account]['gc_config']:
-                        if obj.role == 'owner':
+                        if obj.affiliation == 'owner':
                             # We need to configure the room if it's a new one.
                             # We cannot know it's a new one. Status 201 is not
                             # sent by all servers.
                             gajim.connections[self.account].request_gc_config(
                                 self.room_jid)
-                        elif 'continue_tag' not in gajim.automatic_rooms[
+                        elif 'continue_tag' in gajim.automatic_rooms[
                         self.account][self.room_jid]:
                             # We just need to invite contacts
                             for jid in gajim.automatic_rooms[self.account][

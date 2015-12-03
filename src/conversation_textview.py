@@ -122,6 +122,11 @@ class TextViewImage(gtk.Image):
         if not parent:
             self._disconnect_signals()
             return
+        if isinstance(parent, gtk.EventBox):
+            parent = parent.get_parent()
+            if not parent:
+                self._disconnect_signals()
+                return
 
         self._do_connect(parent, 'style-set', self.do_queue_draw)
         self._do_connect(parent, 'focus-in-event', self.do_queue_draw)
@@ -169,7 +174,12 @@ class ConversationTextview(gobject.GObject):
             )
     )
 
-    MESSAGE_CORRECTED_PIXBUF = gtkgui_helpers.get_icon_pixmap('gtk-spell-check')
+    MESSAGE_CORRECTED_PIXBUF = gtkgui_helpers.get_icon_pixmap('gtk-spell-check',
+        quiet=True)
+    if not MESSAGE_CORRECTED_PIXBUF:
+        MESSAGE_CORRECTED_PIXBUF = gtkgui_helpers.get_icon_pixmap(
+            'gajim-message_corrected')
+
 
     # smooth scroll constants
     MAX_SCROLL_TIME = 0.4 # seconds
@@ -1203,18 +1213,19 @@ class ConversationTextview(gobject.GObject):
             all_tags = [(ttt.lookup(t) if isinstance(t, str) else t) for t in all_tags]
             buffer_.insert_with_tags(end_iter, special_text, *all_tags)
             if 'url' in tags:
-                puny_text = puny_encode(special_text)
-                if not puny_text.endswith('-'):
+                puny_text = helpers.puny_encode_url(special_text)
+                if puny_text != special_text:
                     puny_tags = []
                     if use_other_tags:
                         puny_tags += other_tags
                     puny_tags = [(ttt.lookup(t) if isinstance(t, str) else t) for t in puny_tags]
                     buffer_.insert_with_tags(end_iter, " (%s)" % puny_text, *puny_tags)
 
-    def print_empty_line(self):
+    def print_empty_line(self, iter_=None):
         buffer_ = self.tv.get_buffer()
-        end_iter = buffer_.get_end_iter()
-        buffer_.insert_with_tags_by_name(end_iter, '\n', 'eol')
+        if not iter_:
+            iter_ = buffer_.get_end_iter()
+        buffer_.insert_with_tags_by_name(iter_, '\n', 'eol')
         self.just_cleared = False
 
     def print_conversation_line(self, text, jid, kind, name, tim,
@@ -1387,10 +1398,6 @@ class ConversationTextview(gobject.GObject):
         timestamp_str = helpers.from_one_line(timestamp_str)
         format_ += timestamp_str
         tim_format = time.strftime(format_, tim)
-        if locale.getpreferredencoding() not in ('KOI8-R', 'cp1251'):
-            # if tim_format comes as unicode because of day_str.
-            # we convert it to the encoding that we want (and that is utf-8)
-            tim_format = helpers.ensure_utf8_string(tim_format)
         return tim_format
 
     def detect_other_text_tag(self, text, kind):
@@ -1441,7 +1448,7 @@ class ConversationTextview(gobject.GObject):
             else:
                 end_iter = buffer_.get_end_iter()
             buffer_.insert(end_iter, subject)
-            self.print_empty_line()
+            self.print_empty_line(end_iter)
 
     def print_real_text(self, text, text_tags=[], name=None, xhtml=None,
     graphics=True, iter_=None):

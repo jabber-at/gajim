@@ -2712,6 +2712,8 @@ class ChatControl(ChatControlBase):
 
         if not contact.supports(NS_CHATSTATES):
             return
+        if contact.our_chatstate == False:
+            return
 
         # if the new state we wanna send (state) equals
         # the current state (contact.our_chatstate) then return
@@ -2972,7 +2974,7 @@ class ChatControl(ChatControlBase):
             and gajim.HAVE_PYCRYPTO and self.contact.supports(NS_ESESSION):
                 self.begin_e2e_negotiation()
             elif (not self.session or not self.session.status) and \
-            gajim.connections[self.account].archiving_supported:
+            gajim.connections[self.account].archiving_136_supported:
                 self.begin_archiving_negotiation()
         else:
             self.send_chatstate('active', self.contact)
@@ -3231,6 +3233,7 @@ class ChatControl(ChatControlBase):
 
     def begin_e2e_negotiation(self):
         self.begin_negotiation()
+        self.session.resource = self.contact.resource
         self.session.negotiate_e2e(False)
 
     def begin_archiving_negotiation(self):

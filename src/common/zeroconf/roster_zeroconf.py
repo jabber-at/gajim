@@ -59,17 +59,22 @@ class Roster:
         if not contact:
             return
 
-        host, address, port = contact[4:7]
-        txt = contact[8]
+        addresses = []
+        i = 0
+        for ri in contact[zeroconf.C_RESOLVED_INFO]:
+            addresses += [{}]
+            addresses[i]['host'] = ri[zeroconf.C_RI_HOST]
+            addresses[i]['address'] = ri[zeroconf.C_RI_ADDRESS]
+            addresses[i]['port'] = ri[zeroconf.C_RI_PORT]
+            i += 1
+        txt = contact[zeroconf.C_TXT]
 
         self._data[jid]={}
         self._data[jid]['ask'] = 'none'
         self._data[jid]['subscription'] = 'both'
         self._data[jid]['groups'] = []
         self._data[jid]['resources'] = {}
-        self._data[jid]['address'] = address
-        self._data[jid]['host'] = host
-        self._data[jid]['port'] = port
+        self._data[jid]['addresses'] = addresses
         txt_dict = self.zeroconf.txt_array_to_dict(txt)
         status = txt_dict.get('status', '')
         if not status:

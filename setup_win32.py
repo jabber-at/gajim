@@ -35,6 +35,7 @@ options = {
             'goocanvas', 'Crypto.PublicKey.DSA', 'Crypto.Hash.HMAC',
             'numbers', 'win32com.client', 'win32com.server', 'HTMLParser'],
        'base': 'Win32GUI',
+       'packages': ['cffi', 'cryptography'],
 	   'bin_excludes': [
             'iconv.dll', 'intl.dll', 'libatk-1.0-0.dll',
             'libgdk_pixbuf-2.0-0.dll', 'libgdk-win32-2.0-0.dll',
@@ -56,7 +57,7 @@ options = {
 
 setup(
     name='Gajim',
-    version='0.16',
+    version='0.16.4',
     description='A full featured Jabber client',
     author='Gajim Development Team',
     url='http://gajim.org/',

@@ -555,10 +555,6 @@ class PreferencesWindow:
 
         self.update_proxy_list()
 
-        # check if gajm is default
-        st = gajim.config.get('check_if_gajim_is_default')
-        self.xml.get_object('check_default_client_checkbutton').set_active(st)
-
         # Ignore messages from unknown contacts
         w = self.xml.get_object('ignore_events_from_unknown_contacts_checkbutton')
         st = self.get_per_account_option('ignore_unknown_contacts')
@@ -1177,9 +1173,6 @@ class PreferencesWindow:
         widget.set_inconsistent(False)
         self.on_per_account_checkbutton_toggled(widget, 'send_idle_time')
 
-    def on_check_default_client_checkbutton_toggled(self, widget):
-        self.on_checkbutton_toggled(widget, 'check_if_gajim_is_default')
-
     def on_notify_gmail_checkbutton_toggled(self, widget):
         self.on_checkbutton_toggled(widget, 'notify_on_new_gmail_email')
 
@@ -1610,7 +1603,9 @@ class AccountsWindow:
         self.current_account = None
         model = self.accounts_treeview.get_model()
         model.clear()
-        for account in gajim.config.get_per('accounts'):
+        list_ = gajim.config.get_per('accounts')
+        list_.sort()
+        for account in list_:
             iter_ = model.append()
             model.set(iter_, 0, account)
 
@@ -1968,9 +1963,13 @@ class AccountsWindow:
         else:
             self.xml.get_object('log_history_checkbutton1').set_active(True)
 
+        self.xml.get_object('sync_logs_with_server_checkbutton1').set_active(
+            gajim.config.get_per('accounts', account, 'sync_logs_with_server'))
         self.xml.get_object('sync_with_global_status_checkbutton1').set_active(
             gajim.config.get_per('accounts', account,
             'sync_with_global_status'))
+        self.xml.get_object('carbons_checkbutton1').set_active(
+            gajim.config.get_per('accounts', account, 'enable_message_carbons'))
         self.xml.get_object('use_ft_proxies_checkbutton1').set_active(
             gajim.config.get_per('accounts', account, 'use_ft_proxies'))
 
@@ -2321,12 +2320,24 @@ class AccountsWindow:
         gajim.config.set_per('accounts', self.current_account, 'no_log_for',
             ' '.join(list_no_log_for))
 
+    def on_sync_logs_with_server_checkbutton_toggled(self, widget):
+        if self.ignore_events:
+            return
+        self.on_checkbutton_toggled(widget, 'sync_logs_with_server',
+            account=self.current_account)
+
     def on_sync_with_global_status_checkbutton_toggled(self, widget):
         if self.ignore_events:
             return
         self.on_checkbutton_toggled(widget, 'sync_with_global_status',
             account=self.current_account)
         gajim.interface.roster.update_status_combobox()
+
+    def on_carbons_checkbutton_toggled(self, widget):
+        if self.ignore_events:
+            return
+        self.on_checkbutton_toggled(widget, 'enable_message_carbons',
+            account=self.current_account)
 
     def on_use_ft_proxies_checkbutton1_toggled(self, widget):
         if self.ignore_events:
@@ -2520,6 +2531,7 @@ class AccountsWindow:
         gajim.interface.roster.close_all(account)
         if account == gajim.ZEROCONF_ACC_NAME:
             gajim.connections[account].disable_account()
+        gajim.connections[account].cleanup()
         del gajim.connections[account]
         del gajim.interface.instances[account]
         del gajim.interface.minimized_controls[account]

@@ -160,6 +160,8 @@ class CommonConnection:
         self.vcard_supported = False
         self.private_storage_supported = False
         self.archiving_supported = False
+        self.archiving_313_supported = False
+        self.archiving_136_supported = False
         self.archive_pref_supported = False
         self.roster_supported = True
         self.blocking_supported = False
@@ -311,9 +313,10 @@ class CommonConnection:
                 error = _('The contact\'s key (%s) does not match the key assigned '
                         'in Gajim.' % keyID[:8])
             else:
+                myKeyID = gajim.config.get_per('accounts', self.name, 'keyid')
                 def encrypt_thread(msg, keyID, always_trust=False):
                     # encrypt message. This function returns (msgenc, error)
-                    return self.gpg.encrypt(msg.encode('utf-8'), [keyID],
+                    return self.gpg.encrypt(msg.encode('utf-8'), [keyID, myKeyID],
                         always_trust)
                 def _on_encrypted(output):
                     msgenc, error = output
@@ -422,8 +425,8 @@ class CommonConnection:
 
         if msgenc:
             msg_iq.setTag(nbxmpp.NS_ENCRYPTED + ' x').setData(msgenc)
-            if self.carbons_enabled:
-                msg_iq.addChild(name='private', namespace=nbxmpp.NS_CARBONS)
+            msg_iq.addChild(name='no-permanent-store',
+                namespace=nbxmpp.NS_MSG_HINTS)
 
         if form_node:
             msg_iq.addChild(node=form_node)
@@ -502,6 +505,10 @@ class CommonConnection:
                     if self.carbons_enabled:
                         msg_iq.addChild(name='private',
                             namespace=nbxmpp.NS_CARBONS)
+                    msg_iq.addChild(name='no-permanent-store',
+                        namespace=nbxmpp.NS_MSG_HINTS)
+                    msg_iq.addChild(name='no-copy',
+                        namespace=nbxmpp.NS_MSG_HINTS)
 
         if callback:
             callback(jid, msg, keyID, forward_from, session, original_message,
@@ -810,6 +817,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             self._nec_message_outgoing)
         gajim.ged.register_event_handler('gc-message-outgoing', ged.OUT_CORE,
             self._nec_gc_message_outgoing)
+        gajim.ged.register_event_handler('stanza-message-outgoing',
+            ged.OUT_CORE, self._nec_stanza_message_outgoing)
     # END __init__
 
     def cleanup(self):
@@ -824,6 +833,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             self._nec_message_outgoing)
         gajim.ged.remove_event_handler('gc-message-outgoing', ged.OUT_CORE,
             self._nec_gc_message_outgoing)
+        gajim.ged.remove_event_handler('stanza-message-outgoing', ged.OUT_CORE,
+            self._nec_stanza_message_outgoing)
 
     def get_config_values_or_default(self):
         if gajim.config.get_per('accounts', self.name, 'keep_alives_enabled'):
@@ -877,6 +888,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             self.connection.disconnect()
             self.last_connection = None
             self.connection = None
+
     def set_oldst(self): # Set old state
         if self.old_show:
             self.connected = gajim.SHOW_LIST.index(self.old_show)
@@ -905,6 +917,9 @@ class Connection(CommonConnection, ConnectionHandlers):
                 self.sm.enabled = False
                 gajim.nec.push_incoming_event(OurShowEvent(None, conn=self,
                     show='error'))
+            if self.connection:
+                self.connection.UnregisterDisconnectHandler(
+                    self._disconnectedReconnCB)
             self.disconnect()
             if gajim.config.get_per('accounts', self.name, 'autoreconnect'):
                 self.connected = -1
@@ -1136,10 +1151,20 @@ class Connection(CommonConnection, ConnectionHandlers):
             else:
                 use_custom = gajim.config.get_per('accounts', self.name,
                     'use_custom_host')
-                custom_h = gajim.config.get_per('accounts', self.name,
-                    'custom_host')
-                custom_p = gajim.config.get_per('accounts', self.name,
-                    'custom_port')
+                if use_custom:
+                    custom_h = gajim.config.get_per('accounts', self.name,
+                        'custom_host')
+                    custom_p = gajim.config.get_per('accounts', self.name,
+                        'custom_port')
+                    try:
+                        helpers.idn_to_ascii(custom_h)
+                    except Exception:
+                        gajim.nec.push_incoming_event(InformationEvent(None,
+                            conn=self, level='error',
+                            pri_txt=_('Wrong Custom Hostname'),
+                            sec_txt='Wrong custom hostname "%s". Ignoring it.' \
+                            % custom_h))
+                        use_custom = False
 
         # create connection if it doesn't already exist
         self.connected = 1
@@ -1493,7 +1518,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             if self.on_connect_auth:
                 self.on_connect_auth(None)
                 self.on_connect_auth = None
-                return
+            return
         if not self.connected: # We went offline during connecting process
             if self.on_connect_auth:
                 self.on_connect_auth(None)
@@ -1819,7 +1844,6 @@ class Connection(CommonConnection, ConnectionHandlers):
         if iq_obj.getType() == 'error': # server doesn't support privacy lists
             return
         # active the privacy rule
-        self.privacy_rules_supported = True
         self.activate_privacy_rule('invisible')
         self.connected = gajim.SHOW_LIST.index('invisible')
         self.status = msg
@@ -1897,13 +1921,40 @@ class Connection(CommonConnection, ConnectionHandlers):
         self.awaiting_answers[id_] = (PRIVACY_ARRIVED, )
         self.connection.send(iq)
 
+    def _continue_connection_request_privacy(self):
+        if self.privacy_rules_supported:
+            if not self.privacy_rules_requested:
+                self.privacy_rules_requested = True
+                self._request_privacy()
+        else:
+            if self.continue_connect_info and self.continue_connect_info[0]\
+            == 'invisible':
+                # Trying to login as invisible but privacy list not
+                # supported
+                self.disconnect(on_purpose=True)
+                gajim.nec.push_incoming_event(OurShowEvent(None, conn=self,
+                    show='offline'))
+                gajim.nec.push_incoming_event(InformationEvent(None,
+                    conn=self, level='error', pri_txt=_('Invisibility not '
+                    'supported'), sec_txt=_('Account %s doesn\'t support '
+                    'invisibility.') % self.name))
+                return
+            if self.blocking_supported:
+                iq = nbxmpp.Iq('get', xmlns='')
+                query = iq.setQuery(name='blocklist')
+                query.setNamespace(nbxmpp.NS_BLOCKING)
+                id2_ = self.connection.getAnID()
+                iq.setID(id2_)
+                self.awaiting_answers[id2_] = (BLOCKING_ARRIVED, )
+                self.connection.send(iq)
+            # Ask metacontacts before roster
+            self.get_metacontacts()
+
     def _nec_agent_info_error_received(self, obj):
         if obj.conn.name != self.name:
             return
         if obj.id_[:6] == 'Gajim_':
-            if not self.privacy_rules_requested:
-                self.privacy_rules_requested = True
-                self._request_privacy()
+            self._continue_connection_request_privacy()
 
     def _nec_agent_info_received(self, obj):
         if obj.conn.name != self.name:
@@ -1949,8 +2000,12 @@ class Connection(CommonConnection, ConnectionHandlers):
                         # Remove stored bookmarks accessible to everyone.
                         self.send_pb_purge(our_jid, 'storage:bookmarks')
                         self.send_pb_delete(our_jid, 'storage:bookmarks')
+                if nbxmpp.NS_MAM in obj.features:
+                    self.archiving_supported = True
+                    self.archiving_313_supported = True
                 if nbxmpp.NS_ARCHIVE in obj.features:
                     self.archiving_supported = True
+                    self.archiving_136_supported = True
                 if nbxmpp.NS_ARCHIVE_AUTO in obj.features:
                     self.archive_auto_supported = True
                 if nbxmpp.NS_ARCHIVE_MANAGE in obj.features:
@@ -1970,6 +2025,9 @@ class Connection(CommonConnection, ConnectionHandlers):
                     iq = nbxmpp.Iq('set')
                     iq.setTag('enable', namespace=nbxmpp.NS_CARBONS)
                     self.connection.send(iq)
+                if nbxmpp.NS_PRIVACY in obj.features:
+                    self.privacy_rules_supported = True
+
             if nbxmpp.NS_BYTESTREAM in obj.features and \
             gajim.config.get_per('accounts', self.name, 'use_ft_proxies'):
                 our_fjid = helpers.parse_jid(our_jid + '/' + \
@@ -1986,9 +2044,7 @@ class Connection(CommonConnection, ConnectionHandlers):
                     self.available_transports[transport_type].append(obj.fjid)
                 else:
                     self.available_transports[transport_type] = [obj.fjid]
-            if not self.privacy_rules_requested:
-                self.privacy_rules_requested = True
-                self._request_privacy()
+            self._continue_connection_request_privacy()
 
     def send_custom_status(self, show, msg, jid):
         if not show in gajim.SHOW_LIST:
@@ -2059,9 +2115,11 @@ class Connection(CommonConnection, ConnectionHandlers):
         subject, type_, msg_iq, xhtml):
             if isinstance(msg_iq, list):
                 for iq in msg_iq:
-                    msg_id = self.connection.send(iq, now=obj.now)
+                    gajim.nec.push_incoming_event(StanzaMessageOutgoingEvent(
+                        None, conn=self, msg_iq=iq, now=obj.now))
             else:
-                msg_id = self.connection.send(msg_iq, now=obj.now)
+                gajim.nec.push_incoming_event(StanzaMessageOutgoingEvent(None,
+                    conn=self, msg_iq=msg_iq, now=obj.now))
             gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
                 jid=jid, message=msg, keyID=keyID, chatstate=obj.chatstate))
             if obj.callback:
@@ -2086,6 +2144,11 @@ class Connection(CommonConnection, ConnectionHandlers):
             form_node=obj.form_node, original_message=obj.original_message,
             delayed=obj.delayed, attention=obj.attention,
             correction_msg=obj.correction_msg, callback=cb)
+
+    def _nec_stanza_message_outgoing(self, obj):
+        if obj.conn.name != self.name:
+            return
+        obj.msg_id = self.connection.send(obj.msg_iq, now=obj.now)
 
     def send_contacts(self, contacts, fjid, type_='message'):
         """
@@ -2786,6 +2849,12 @@ class Connection(CommonConnection, ConnectionHandlers):
         self.connection.send(iq)
 
     def get_password(self, callback, type_):
+        if gajim.config.get_per('accounts', self.name, 'anonymous_auth') and \
+        type_ != 'ANONYMOUS':
+            gajim.nec.push_incoming_event(NonAnonymousServerErrorEvent(None,
+                conn=self))
+            self._on_disconnected()
+            return
         self.pasword_callback = (callback, type_)
         if type_ == 'X-MESSENGER-OAUTH2':
             client_id = gajim.config.get_per('accounts', self.name,
