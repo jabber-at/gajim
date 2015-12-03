@@ -12,9 +12,9 @@
     <accel-groups>
       <group name="accelgroup1"/>
     </accel-groups>
-    <signal name="focus_in_event" handler="on_roster_window_focus_in_event"/>
     <signal name="key_press_event" handler="on_roster_window_key_press_event"/>
     <signal name="delete_event" handler="on_roster_window_delete_event"/>
+    <signal name="focus_in_event" handler="on_roster_window_focus_in_event"/>
     <signal name="focus_out_event" handler="on_roster_window_focus_out_event"/>
     <signal name="popup_menu" handler="on_roster_window_popup_menu"/>
     <child>
@@ -53,7 +53,7 @@
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="join_gc_menuitem">
-                        <property name="label" translatable="yes">Join _Group Chat...</property>
+                        <property name="label" translatable="yes">Join _Group Chat</property>
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="image">image3</property>
@@ -210,6 +210,7 @@
                     <child>
                       <object class="GtkCheckMenuItem" id="show_roster_menuitem">
                         <property name="visible">True</property>
+                        <property name="sensitive">False</property>
                         <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
                         <property name="label" translatable="yes">Show _Roster</property>
                         <property name="use_underline">True</property>
@@ -280,6 +281,16 @@
                         <property name="use_stock">False</property>
                         <property name="accel_group">accelgroup1</property>
                         <signal name="activate" handler="on_faq_menuitem_activate"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="keyboard_shortcuts_menuitem">
+                        <property name="label" translatable="yes">Keyboard Shortcuts</property>
+                        <property name="visible">True</property>
+                        <property name="use_underline">True</property>
+                        <property name="image">image14</property>
+                        <property name="use_stock">False</property>
+                        <signal name="activate" handler="on_keyboard_shortcuts_menuitem_activate"/>
                       </object>
                     </child>
                     <child>
@@ -465,6 +476,11 @@
   <object class="GtkImage" id="image13">
     <property name="visible">True</property>
     <property name="stock">gtk-disconnect</property>
+    <property name="icon-size">1</property>
+  </object>
+  <object class="GtkImage" id="image14">
+    <property name="visible">True</property>
+    <property name="stock">gtk-info</property>
     <property name="icon-size">1</property>
   </object>
 </interface>

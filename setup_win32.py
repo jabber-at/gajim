@@ -1,6 +1,6 @@
 ## setup_win32.py (run me as python setup_win32.py py2exe -O2)
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##
@@ -33,7 +33,7 @@ options = {
    'build_exe': {
        'includes': ['gtk.keysyms', 'dumbdbm', 'dbhash', 'bsddb', 'new',
             'goocanvas', 'Crypto.PublicKey.DSA', 'Crypto.Hash.HMAC',
-            'numbers', 'HTMLParser'],
+            'numbers', 'win32com.client', 'win32com.server', 'HTMLParser'],
        'base': 'Win32GUI',
 	   'bin_excludes': [
             'iconv.dll', 'intl.dll', 'libatk-1.0-0.dll',
@@ -44,6 +44,11 @@ options = {
             'libgtk-win32-2.0-0.dll', 'libpango-1.0-0.dll',
             'libpangowin32-1.0-0.dll', 'libcairo-2.dll',
             'libpangocairo-1.0-0.dll', 'libpangoft2-1.0-0.dll',
+            'libfarstream-0.1-0.dll', 'libgcc_s_dw2-1.dll',
+            'libgstbase-0.10-0.dll', 'libgstcontroller-0.10-0.dll',
+            'libgstdataprotocol-0.10-0.dll', 'libgstinterfaces-0.10-0.dll',
+            'libgstnet-0.10-0.dll', 'libgstreamer-0.10-0.dll',
+            'libiconv-2.dll', 'libxml2.dll', 'libxml2-2.dll',
         ],
    }
 }
@@ -51,7 +56,7 @@ options = {
 
 setup(
     name='Gajim',
-    version='0.15.1',
+    version='0.16',
     description='A full featured Jabber client',
     author='Gajim Development Team',
     url='http://gajim.org/',

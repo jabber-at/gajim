@@ -28,13 +28,12 @@ import socket
 
 from calendar import timegm
 
-import common.xmpp
+import nbxmpp
 
 from common import helpers
 from common import gajim
 from common.zeroconf import zeroconf
 from common.commands import ConnectionCommands
-from common.pep import ConnectionPEP
 from common.protocol.bytestream import ConnectionSocks5BytestreamZeroconf
 from common.connection_handlers_events import ZeroconfMessageReceivedEvent
 
@@ -72,8 +71,9 @@ class ConnectionVcard(connection_handlers.ConnectionVcard):
 
 
 class ConnectionHandlersZeroconf(ConnectionVcard,
-ConnectionSocks5BytestreamZeroconf, ConnectionCommands, ConnectionPEP,
-connection_handlers.ConnectionHandlersBase, connection_handlers.ConnectionJingle):
+ConnectionSocks5BytestreamZeroconf, ConnectionCommands,
+connection_handlers.ConnectionPEP, connection_handlers.ConnectionHandlersBase,
+connection_handlers.ConnectionJingle):
     def __init__(self):
         ConnectionVcard.__init__(self)
         ConnectionSocks5BytestreamZeroconf.__init__(self)
@@ -111,12 +111,12 @@ connection_handlers.ConnectionHandlersBase, connection_handlers.ConnectionJingle
             return
 
         if self.commandItemsQuery(con, iq_obj):
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed
         node = iq_obj.getTagAttr('query', 'node')
         if node is None:
             result = iq_obj.buildReply('result')
             self.connection.send(result)
-            raise common.xmpp.NodeProcessed
-        if node==common.xmpp.NS_COMMANDS:
+            raise nbxmpp.NodeProcessed
+        if node==nbxmpp.NS_COMMANDS:
             self.commandListQuery(con, iq_obj)
-            raise common.xmpp.NodeProcessed
+            raise nbxmpp.NodeProcessed

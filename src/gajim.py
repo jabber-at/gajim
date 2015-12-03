@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/gajim.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004-2005 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005 Alex Podaras <bigpod AT gmail.com>
 ##                    Norman Rasmussen <norman AT rasmussen.co.za>
@@ -62,12 +62,41 @@ if os.name == 'nt':
         new_list.insert(0, os.path.join(os.getcwd(), 'gtk', 'bin'))
         os.environ['PATH'] = ';'.join(new_list)
 
+    # Needs to be imported very early to not crash Gajim on exit.
+    try:
+        __import__('libxml2mod')
+    except ImportError:
+        pass
+
+HAS_NBXMPP=True
+MIN_NBXMPP_VER = "0.5.1"
+try:
+    import nbxmpp
+except ImportError:
+    HAS_NBXMPP=False
+
+if not HAS_NBXMPP:
+    print 'Gajim needs python-nbxmpp to run. Quiting...'
+    sys.exit()
+
+try:
+    from distutils.version import LooseVersion as V
+    if V(nbxmpp.__version__) < V(MIN_NBXMPP_VER):
+        HAS_NBXMPP=False
+except:
+    HAS_NBXMPP=False
+
+if not HAS_NBXMPP:
+    print 'Gajim needs python-nbxmpp >= %s to run. Quiting...' % MIN_NBXMPP_VER
+    sys.exit()
+
 from common import demandimport
 demandimport.enable()
 demandimport.ignore += ['gobject._gobject', 'libasyncns', 'i18n',
     'logging.NullHandler', 'dbus.service', 'OpenSSL.SSL', 'OpenSSL.crypto',
     'common.sleepy', 'DLFCN', 'dl', 'xml.sax', 'xml.sax.handler', 'ic',
-    'Crypto.PublicKey', 'IPython', 'contextlib', 'imp']
+    'Crypto.PublicKey', 'IPython', 'contextlib', 'imp', 'gst.interfaces',
+    'monotonic', 'gtkexcepthook']
 
 if os.name == 'nt':
     import locale
@@ -99,7 +128,7 @@ if os.name == 'nt':
     sys.path.append('.')
 
 from common import logging_helpers
-logging_helpers.init('TERM' in os.environ)
+logging_helpers.init(sys.stderr.isatty())
 
 import logging
 # gajim.gui or gajim.gtk more appropriate ?
@@ -115,7 +144,7 @@ def parseOpts():
     try:
         shortargs = 'hqvl:p:c:'
         # add gtk/gnome session option as gtk_get_option_group is not wrapped
-        longargs = 'help quiet verbose loglevel= profile= config_path='
+        longargs = 'help quiet verbose loglevel= profile= config-path='
         longargs += ' class= name= screen= gtk-module= sync g-fatal-warnings'
         longargs += ' sm-client-id= sm-client-state-file= sm-disable'
         opts = getopt.getopt(sys.argv[1:], shortargs, longargs.split())[0]
@@ -125,9 +154,22 @@ def parseOpts():
         sys.exit(2)
     for o, a in opts:
         if o in ('-h', '--help'):
-            print 'gajim [--help] [--quiet] [--verbose] ' + \
-                '[--loglevel subsystem=level[,subsystem=level[...]]] ' + \
-                '[--profile name] [--config-path]'
+            out = _('Usage:') + \
+                '\n  gajim [options] filename\n\n' + \
+                _('Options:') + \
+                '\n  -h, --help         ' + \
+                    _('Show this help message and exit') + \
+                '\n  -q, --quiet        ' + \
+                    _('Show only critical errors') + \
+                '\n  -v, --verbose      ' + \
+                    _('Print xml stanzas and other debug information') + \
+                '\n  -p, --profile      ' + \
+                    _('Use defined profile in configuration directory') + \
+                '\n  -c, --config-path  ' + \
+                    _('Set configuration directory') + \
+                '\n  -l, --loglevel     ' + \
+                    _('Configure logging system') + '\n'
+            print out.encode(locale.getpreferredencoding())
             sys.exit()
         elif o in ('-q', '--quiet'):
             logging_helpers.set_quiet()
@@ -199,6 +241,8 @@ warnings.resetwarnings()
 if os.name == 'nt':
     warnings.filterwarnings(action='ignore')
 
+if gtk.widget_get_default_direction() == gtk.TEXT_DIR_RTL:
+    i18n.direction_mark = u'\u200F'
 pritext = ''
 
 from common import exceptions
@@ -271,6 +315,20 @@ gajimpaths = common.configpaths.gajimpaths
 
 pid_filename = gajimpaths['PID_FILE']
 config_filename = gajimpaths['CONFIG_FILE']
+
+# Seed the OpenSSL pseudo random number generator from file and initialize
+RNG_SEED = gajimpaths['RNG_SEED']
+PYOPENSSL_PRNG_PRESENT = False
+try:
+    import OpenSSL.rand
+    from common import crypto
+    PYOPENSSL_PRNG_PRESENT = True
+    # Seed from file
+    OpenSSL.rand.load_file(str(RNG_SEED))
+    crypto.add_entropy_sources_OpenSSL()
+    OpenSSL.rand.write_file(str(RNG_SEED))
+except ImportError:
+    log.info("PyOpenSSL PRNG not available")
 
 import traceback
 import errno
@@ -418,6 +476,9 @@ except IOError, e2:
 del pid_dir
 
 def on_exit():
+    # Save the entropy from OpenSSL PRNG
+    if PYOPENSSL_PRNG_PRESENT:
+        OpenSSL.rand.write_file(str(RNG_SEED))
     # delete pid file on normal exit
     if os.path.exists(pid_filename):
         os.remove(pid_filename)
@@ -472,13 +533,9 @@ if __name__ == '__main__':
     interface.run()
 
     try:
-        if os.name != 'nt':
-            # This makes Gajim unusable under windows, and threads are used only
-            # for GPG, so not under windows
-            gtk.gdk.threads_init()
-            gtk.gdk.threads_enter()
+        gtk.gdk.threads_init()
+        gtk.gdk.threads_enter()
         gtk.main()
-        if os.name != 'nt':
-            gtk.gdk.threads_leave()
+        gtk.gdk.threads_leave()
     except KeyboardInterrupt:
         print >> sys.stderr, 'KeyboardInterrupt'

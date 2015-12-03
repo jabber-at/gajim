@@ -4,7 +4,7 @@
 ## Copyright (C) 2005-2006 Andrew Sayman <lorien420 AT myrealbox.com>
 ##                         Dimitur Kirov <dkirov AT gmail.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006-2007 Travis Shirk <travis AT pobox.com>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2007 Lukas Petrovicky <lukas AT petrovicky.net>
@@ -38,6 +38,8 @@ from time import time
 from dialogs import AddNewContactWindow, NewChatDialog, JoinGroupchatWindow
 from common import ged
 from common.connection_handlers_events import MessageOutgoingEvent
+from common.connection_handlers_events import GcMessageOutgoingEvent
+
 
 from common import dbus_support
 if dbus_support.supported:
@@ -138,8 +140,7 @@ class Remote:
 
     def on_chatstate_received(self, obj):
         self.raise_signal('ChatState', (obj.conn.name, [
-            obj.jid, obj.fjid, obj.stanza, obj.resource, obj.composing_xep,
-            obj.chatstate]))
+            obj.jid, obj.fjid, obj.stanza, obj.resource, obj.chatstate]))
 
     def on_message_sent(self, obj):
         try:
@@ -441,11 +442,9 @@ class SignalObject(dbus.service.Object):
             ctrl = gajim.interface.msg_win_mgr.search_control(jid,
                 connected_account)
             if ctrl:
-                ctrl.print_conversation(message, frm='outgoing')
-
-            gajim.nec.push_outgoing_event(MessageOutgoingEvent(None,
-                account=connected_account, jid=jid, message=message,
-                keyID=keyID, type_=type_, control=ctrl))
+                ctrl.send_message(message)
+            else:
+                gajim.nec.push_outgoing_event(MessageOutgoingEvent(None, account=connected_account, jid=jid, message=message, keyID=keyID, type_=type_, control=ctrl))
 
             return DBUS_BOOLEAN(True)
         return DBUS_BOOLEAN(False)
@@ -478,7 +477,8 @@ class SignalObject(dbus.service.Object):
         connected_account = self._get_account_for_groupchat(account, room_jid)
         if connected_account:
             connection = gajim.connections[connected_account]
-            connection.send_gc_message(room_jid, message)
+            gajim.nec.push_outgoing_event(GcMessageOutgoingEvent(None,
+                account=connected_account, jid=room_jid, message=message))
             return DBUS_BOOLEAN(True)
         return DBUS_BOOLEAN(False)
 
@@ -739,7 +739,7 @@ class SignalObject(dbus.service.Object):
                 for node in path:
                     key += node + '#'
             key += name
-            prefs_dict[DBUS_STRING(key)] = DBUS_STRING(value[1])
+            prefs_dict[DBUS_STRING(key)] = DBUS_STRING(value)
         gajim.config.foreach(get_prefs)
         return prefs_dict
 

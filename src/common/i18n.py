@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/i18n.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005-2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2009 Benjamin Richter <br AT waldteufel-online.net>
@@ -26,6 +26,9 @@ import gettext
 import os
 import defs
 import unicodedata
+
+# May be changed after GTK is imported
+direction_mark = u'\u200E'
 
 def paragraph_direction_mark(text):
     """

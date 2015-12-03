@@ -2,7 +2,7 @@
 ## src/common/pubsub.py
 ##
 ## Copyright (C) 2006 Tomasz Melcer <liori AT exroot.org>
-## Copyright (C) 2006-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2008 Stephan Erb <steve-e AT h3c.de>
 ##
@@ -21,7 +21,7 @@
 ## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 ##
 
-import xmpp
+import nbxmpp
 import gajim
 import connection_handlers
 import ged
@@ -44,8 +44,8 @@ class ConnectionPubSub:
     def send_pb_subscription_query(self, jid, cb, *args, **kwargs):
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('get', to=jid)
-        pb = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('get', to=jid)
+        pb = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         pb.addChild('subscriptions')
 
         id_ = self.connection.send(query)
@@ -56,8 +56,8 @@ class ConnectionPubSub:
         if not self.connection or self.connected < 2:
             return
         our_jid = gajim.get_jid_from_account(self.name)
-        query = xmpp.Iq('set', to=jid)
-        pb = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('set', to=jid)
+        pb = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         pb.addChild('subscribe', {'node': node, 'jid': our_jid})
 
         id_ = self.connection.send(query)
@@ -68,8 +68,8 @@ class ConnectionPubSub:
         if not self.connection or self.connected < 2:
             return
         our_jid = gajim.get_jid_from_account(self.name)
-        query = xmpp.Iq('set', to=jid)
-        pb = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('set', to=jid)
+        pb = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         pb.addChild('unsubscribe', {'node': node, 'jid': our_jid})
 
         id_ = self.connection.send(query)
@@ -82,8 +82,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        e = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('set', to=jid)
+        e = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         p = e.addChild('publish', {'node': node})
         attrs = {}
         if id_:
@@ -101,8 +101,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('get', to=jid)
-        r = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('get', to=jid)
+        r = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         r = r.addChild('items', {'node': node})
         id_ = self.connection.send(query)
 
@@ -115,8 +115,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        r = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('set', to=jid)
+        r = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         r = r.addChild('retract', {'node': node, 'notify': '1'})
         r = r.addChild('item', {'id': id_})
 
@@ -128,8 +128,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        d = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB_OWNER)
+        query = nbxmpp.Iq('set', to=jid)
+        d = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB_OWNER)
         d = d.addChild('purge', {'node': node})
 
         self.connection.send(query)
@@ -140,8 +140,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        d = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB_OWNER)
+        query = nbxmpp.Iq('set', to=jid)
+        d = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB_OWNER)
         d = d.addChild('delete', {'node': node})
 
         def response(con, resp, jid, node):
@@ -160,8 +160,8 @@ class ConnectionPubSub:
         """
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        c = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB)
+        query = nbxmpp.Iq('set', to=jid)
+        c = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB)
         c = c.addChild('create', {'node': node})
         if configure:
             conf = c.addChild('configure')
@@ -173,8 +173,8 @@ class ConnectionPubSub:
     def send_pb_configure(self, jid, node, form):
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('set', to=jid)
-        c = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB_OWNER)
+        query = nbxmpp.Iq('set', to=jid)
+        c = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB_OWNER)
         c = c.addChild('configure', {'node': node})
         c.addChild(node=form)
 
@@ -191,6 +191,8 @@ class ConnectionPubSub:
             conn=self, stanza=stanza))
 
     def _nec_pubsub_bookmarks_received(self, obj):
+        if obj.conn.name != self.name:
+            return
         bm_jids = [b['jid'] for b in self.bookmarks]
         for bm in obj.bookmarks:
             if bm['jid'] not in bm_jids:
@@ -213,8 +215,8 @@ class ConnectionPubSub:
     def request_pb_configuration(self, jid, node):
         if not self.connection or self.connected < 2:
             return
-        query = xmpp.Iq('get', to=jid)
-        e = query.addChild('pubsub', namespace=xmpp.NS_PUBSUB_OWNER)
+        query = nbxmpp.Iq('get', to=jid)
+        e = query.addChild('pubsub', namespace=nbxmpp.NS_PUBSUB_OWNER)
         e = e.addChild('configure', {'node': node})
         id_ = self.connection.getAnID()
         query.setID(id_)

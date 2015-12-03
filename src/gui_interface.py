@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/gajim.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004-2005 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005 Alex Podaras <bigpod AT gmail.com>
 ##                    Norman Rasmussen <norman AT rasmussen.co.za>
@@ -34,7 +34,6 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 ##
-
 import os
 import sys
 import re
@@ -70,7 +69,8 @@ from session import ChatControlSession
 
 import common.sleepy
 
-from common.xmpp import idlequeue
+from nbxmpp import idlequeue
+from nbxmpp import Hashes
 from common.zeroconf import connection_zeroconf
 from common import resolver
 from common import caps_cache
@@ -83,6 +83,9 @@ from common import logging_helpers
 from common.connection_handlers_events import OurShowEvent, \
     FileRequestErrorEvent, InformationEvent
 from common.connection import Connection
+from common import jingle
+from common.file_props import FilesProp
+from common import pep
 
 import roster_window
 import profile_window
@@ -167,12 +170,12 @@ class Interface:
             sid = obj.id_
             if len(obj.id_) > 3 and obj.id_[2] == '_':
                 sid = obj.id_[3:]
-            if sid in ft.files_props['s']:
-                file_props = ft.files_props['s'][sid]
+            file_props = FilesProp.getFileProp(obj.conn.name, sid)
+            if file_props :
                 if unicode(obj.errcode) == '400':
-                    file_props['error'] = -3
+                    file_props.error = -3
                 else:
-                    file_props['error'] = -4
+                    file_props.error = -4
                 gajim.nec.push_incoming_event(FileRequestErrorEvent(None,
                     conn=obj.conn, jid=obj.jid, file_props=file_props,
                     error_msg=obj.errmsg))
@@ -182,8 +185,8 @@ class Interface:
             sid = obj.id_
             if len(obj.id_) > 3 and obj.id_[2] == '_':
                 sid = obj.id_[3:]
-            if sid in obj.conn.files_props:
-                file_props = obj.conn.files_props[sid]
+            file_props = FilesProp.getFileProp(obj.conn.name, sid)
+            if file_props:
                 self.handle_event_file_send_error(obj.conn.name, (obj.fjid,
                     file_props))
                 obj.conn.disconnect_transfer(file_props)
@@ -374,7 +377,7 @@ class Interface:
         is_highest = (highest and highest.resource == resource)
 
         ctrl = self.msg_win_mgr.get_control(jid, account)
-        if ctrl and ctrl.session and ctrl.session.resource == resource:
+        if ctrl and ctrl.session and len(obj.contact_list) > 1:
             ctrl.remove_session(ctrl.session)
 
     def handle_event_msgerror(self, obj):
@@ -382,11 +385,6 @@ class Interface:
         account = obj.conn.name
         jids = obj.fjid.split('/', 1)
         jid = jids[0]
-
-        if obj.error_code == '503':
-            # If we get server-not-found error, stop sending chatstates
-            for contact in gajim.contacts.get_contacts(account, jid):
-                contact.composing_xep = False
 
         session = obj.session
 
@@ -600,6 +598,12 @@ class Interface:
                 for jid in gajim.automatic_rooms[account][obj.jid]['invities']:
                     obj.conn.send_invite(obj.jid, jid,
                         continue_tag=continue_tag)
+                    gc_control = self.msg_win_mgr.get_gc_control(obj.jid,
+                        account)
+                    if gc_control:
+                        gc_control.print_conversation(
+                            _('%(jid)s has been invited in this room') % {
+                            'jid': jid}, graphics=False)
             del gajim.automatic_rooms[account][obj.jid]
         elif obj.jid not in self.instances[account]['gc_config']:
             self.instances[account]['gc_config'][obj.jid] = \
@@ -612,23 +616,36 @@ class Interface:
             self.instances[account]['gc_config'][obj.jid].\
                 affiliation_list_received(obj.users_dict)
 
+    def handle_event_gc_decline(self, obj):
+        account = obj.conn.name
+        gc_control = self.msg_win_mgr.get_gc_control(obj.room_jid, account)
+        if gc_control:
+            if obj.reason:
+                gc_control.print_conversation(
+                    _('%(jid)s declined the invitation: %(reason)s') % {
+                    'jid': obj.jid_from, 'reason': obj.reason}, graphics=False)
+            else:
+                gc_control.print_conversation(
+                    _('%(jid)s declined the invitation') % {
+                    'jid': obj.jid_from}, graphics=False)
+
     def handle_event_gc_invitation(self, obj):
         #('GC_INVITATION', (room_jid, jid_from, reason, password, is_continued))
-        jid = gajim.get_jid_without_resource(obj.jid_from)
         account = obj.conn.name
         if helpers.allow_popup_window(account) or not self.systray_enabled:
-            dialogs.InvitationReceivedDialog(account, obj.room_jid, jid,
-                obj.password, obj.reason, is_continued=obj.is_continued)
+            dialogs.InvitationReceivedDialog(account, obj.room_jid,
+                obj.jid_from, obj.password, obj.reason,
+                is_continued=obj.is_continued)
             return
 
-        self.add_event(account, jid, 'gc-invitation', (obj.room_jid,
-            obj.reason, obj.password, obj.is_continued))
+        self.add_event(account, obj.jid_from, 'gc-invitation', (obj.room_jid,
+            obj.reason, obj.password, obj.is_continued, obj.jid_from))
 
         if helpers.allow_showing_notification(account):
             path = gtkgui_helpers.get_icon_path('gajim-gc_invitation', 48)
             event_type = _('Groupchat Invitation')
-            notify.popup(event_type, jid, account, 'gc-invitation', path,
-                event_type, obj.room_jid)
+            notify.popup(event_type, obj.jid_from, account, 'gc-invitation',
+                path, event_type, obj.room_jid)
 
     def forget_gpg_passphrase(self, keyid):
         if keyid in self.gpg_passphrase:
@@ -638,16 +655,17 @@ class Interface:
     def handle_event_bad_gpg_passphrase(self, obj):
         #('BAD_PASSPHRASE', account, ())
         if obj.use_gpg_agent:
-            sectext = _('You configured Gajim to use GPG agent, but there is no'
-                ' GPG agent running or it returned a wrong passphrase.\n')
+            sectext = _('You configured Gajim to use OpenPGP agent, but there '
+                'is no OpenPGP agent running or it returned a wrong passphrase.'
+                '\n')
             sectext += _('You are currently connected without your OpenPGP '
                 'key.')
             dialogs.WarningDialog(_('Your passphrase is incorrect'), sectext)
         else:
-            path = gtkgui_helpers.get_icon_path('gajim-warning', 48)
+            path = gtkgui_helpers.get_icon_path('gtk-dialog-warning', 48)
             account = obj.conn.name
             notify.popup('warning', account, account, 'warning', path,
-                _('OpenGPG Passphrase Incorrect'),
+                _('OpenPGP Passphrase Incorrect'),
                 _('You are currently connected without your OpenPGP key.'))
         self.forget_gpg_passphrase(obj.keyID)
 
@@ -677,15 +695,15 @@ class Interface:
         #('GPG_ALWAYS_TRUST', account, callback)
         def on_yes(checked):
             if checked:
-                obj.conn.gpg.always_trust = True
+                obj.conn.gpg.always_trust.append(obj.keyID)
             obj.callback(True)
 
         def on_no():
             obj.callback(False)
 
-        dialogs.YesNoDialog(_('GPG key not trusted'), _('The GPG key used to '
-            'encrypt this chat is not trusted. Do you really want to encrypt '
-            'this message?'), checktext=_('_Do not ask me again'),
+        dialogs.YesNoDialog(_('OpenPGP key not trusted'), _('The OpenPGP key '
+            'used to encrypt this chat is not trusted. Do you really want to '
+            'encrypt this message?'), checktext=_('_Do not ask me again'),
             on_response_yes=on_yes, on_response_no=on_no)
 
     def handle_event_password_required(self, obj):
@@ -716,6 +734,30 @@ class Interface:
             _('Password Required'), text, _('Save password'), ok_handler=on_ok,
             cancel_handler=on_cancel)
 
+    def handle_oauth2_credentials(self, obj):
+        account = obj.conn.name
+        def on_ok(refresh):
+            gajim.config.set_per('accounts', account, 'oauth2_refresh_token',
+                refresh)
+            st = gajim.config.get_per('accounts', account, 'last_status')
+            msg = helpers.from_one_line(gajim.config.get_per('accounts',
+                account, 'last_status_msg'))
+            gajim.interface.roster.send_status(account, st, msg)
+            del self.pass_dialog[account]
+
+        def on_cancel():
+            gajim.config.set_per('accounts', account, 'oauth2_refresh_token',
+                '')
+            self.roster.set_state(account, 'offline')
+            self.roster.update_status_combobox()
+            del self.pass_dialog[account]
+
+        instruction = _('Please copy / paste the refresh token from the website'
+            ' that has just been opened.')
+        self.pass_dialog[account] = dialogs.InputTextDialog(
+            _('Oauth2 Credentials'), instruction, is_modal=False,
+            ok_handler=on_ok, cancel_handler=on_cancel)
+
     def handle_event_roster_info(self, obj):
         #('ROSTER_INFO', account, (jid, name, sub, ask, groups))
         account = obj.conn.name
@@ -731,9 +773,14 @@ class Interface:
             if obj.sub == 'remove':
                 return
             # Add new contact to roster
+            keyID = ''
+            attached_keys = gajim.config.get_per('accounts', account,
+                'attached_gpg_keys').split()
+            if obj.jid in attached_keys:
+                keyID = attached_keys[attached_keys.index(obj.jid) + 1]
             contact = gajim.contacts.create_contact(jid=obj.jid,
                 account=account, name=obj.nickname, groups=obj.groups,
-                show='offline', sub=obj.sub, ask=obj.ask)
+                show='offline', sub=obj.sub, ask=obj.ask, keyID=keyID)
             gajim.contacts.add_contact(account, contact)
             self.roster.add_contact(obj.jid, account)
         else:
@@ -746,21 +793,24 @@ class Interface:
                 # another of our instance removed a contact. Remove it here too
                 self.roster.remove_contact(obj.jid, account, backend=True)
                 return
+            update = False
             if contacts[0].sub != obj.sub or contacts[0].ask != obj.ask\
             or old_groups != obj.groups:
                 # c.get_shown_groups() has changed. Reflect that in
                 # roster_window
                 self.roster.remove_contact(obj.jid, account, force=True)
+                update = True
             for contact in contacts:
                 contact.name = obj.nickname or ''
                 contact.sub = obj.sub
                 contact.ask = obj.ask
                 contact.groups = obj.groups or []
-            self.roster.add_contact(obj.jid, account)
-            # Refilter and update old groups
-            for group in old_groups:
-                self.roster.draw_group(group, account)
-            self.roster.draw_contact(obj.jid, account)
+            if update:
+                self.roster.add_contact(obj.jid, account)
+                # Refilter and update old groups
+                for group in old_groups:
+                    self.roster.draw_group(group, account)
+                self.roster.draw_contact(obj.jid, account)
         if obj.jid in self.instances[account]['sub_request'] and obj.sub in (
         'from', 'both'):
             self.instances[account]['sub_request'][obj.jid].window.destroy()
@@ -782,7 +832,7 @@ class Interface:
         jid = array[0]
         file_props = array[1]
         ft = self.instances['file_transfers']
-        ft.set_status(file_props['type'], file_props['sid'], 'stop')
+        ft.set_status(file_props, 'stop')
 
         if helpers.allow_popup_window(account):
             ft.show_send_error(file_props)
@@ -794,7 +844,7 @@ class Interface:
             path = gtkgui_helpers.get_icon_path('gajim-ft_error', 48)
             event_type = _('File Transfer Error')
             notify.popup(event_type, jid, account, 'file-send-error', path,
-                event_type, file_props['name'])
+                event_type, file_props.name)
 
     def handle_event_gmail_notify(self, obj):
         jid = obj.jid
@@ -836,8 +886,8 @@ class Interface:
     def handle_event_file_request_error(self, obj):
         # ('FILE_REQUEST_ERROR', account, (jid, file_props, error_msg))
         ft = self.instances['file_transfers']
-        ft.set_status(obj.file_props['type'], obj.file_props['sid'], 'stop')
-        errno = obj.file_props['error']
+        ft.set_status(obj.file_props, 'stop')
+        errno = obj.file_props.error
 
         if helpers.allow_popup_window(obj.conn.name):
             if errno in (-4, -5):
@@ -858,7 +908,7 @@ class Interface:
             path = gtkgui_helpers.get_icon_path('gajim-ft_error', 48)
             event_type = _('File Transfer Error')
             notify.popup(event_type, obj.jid, obj.conn.name, msg_type, path,
-                title=event_type, text=obj.file_props['name'])
+                title=event_type, text=obj.file_props.name)
 
     def handle_event_file_request(self, obj):
         account = obj.conn.name
@@ -873,14 +923,19 @@ class Interface:
             gajim.contacts.add_contact(account, contact)
             self.roster.add_contact(obj.jid, account)
         contact = gajim.contacts.get_first_contact_from_jid(account, obj.jid)
-
+        if obj.file_props.session_type == 'jingle':
+            request = obj.stanza.getTag('jingle').getTag('content')\
+                        .getTag('description').getTag('request')
+            if request:
+                # If we get a request instead
+                ft_win = self.instances['file_transfers']
+                ft_win.add_transfer(account, contact, obj.file_props)
+                return
         if helpers.allow_popup_window(account):
             self.instances['file_transfers'].show_file_request(account, contact,
                 obj.file_props)
             return
-
         self.add_event(account, obj.jid, 'file-request', obj.file_props)
-
         if helpers.allow_showing_notification(account):
             path = gtkgui_helpers.get_icon_path('gajim-ft_request', 48)
             txt = _('%s wants to send you a file.') % gajim.get_name_from_jid(
@@ -896,45 +951,94 @@ class Interface:
         if time.time() - self.last_ftwindow_update > 0.5:
             # update ft window every 500ms
             self.last_ftwindow_update = time.time()
-            self.instances['file_transfers'].set_progress(file_props['type'],
-                    file_props['sid'], file_props['received-len'])
+            self.instances['file_transfers'].set_progress(file_props.type_,
+                    file_props.sid, file_props.received_len)
+
+    def __compare_hashes(self, account, file_props):
+        session = gajim.connections[account].get_jingle_session(jid=None,
+            sid=file_props.sid)
+        ft_win = self.instances['file_transfers']
+        if not file_props.hash_:
+            # We disn't get the hash, sender probably don't support that
+            jid = unicode(file_props.sender)
+            self.popup_ft_result(account, jid, file_props)
+            ft_win.set_status(file_props, 'ok')
+        h = Hashes()
+        try:
+            file_ = open(file_props.file_name, 'rb')
+        except:
+            return
+        hash_ = h.calculateHash(file_props.algo, file_)
+        file_.close()
+        # If the hash we received and the hash of the file are the same,
+        # then the file is not corrupt
+        jid = unicode(file_props.sender)
+        if file_props.hash_ == hash_:
+            gobject.idle_add(self.popup_ft_result, account, jid, file_props)
+            gobject.idle_add(ft_win.set_status, file_props, 'ok')
+        else:
+            # wrong hash, we need to get the file again!
+            file_props.error = -10
+            gobject.idle_add(self.popup_ft_result, account, jid, file_props)
+            gobject.idle_add(ft_win.set_status, file_props, 'hash_error')
+        # End jingle session
+        if session:
+            session.end_session()
 
     def handle_event_file_rcv_completed(self, account, file_props):
         ft = self.instances['file_transfers']
-        if file_props['error'] == 0:
-            ft.set_progress(file_props['type'], file_props['sid'],
-                    file_props['received-len'])
+        if file_props.error == 0:
+            ft.set_progress(file_props.type_, file_props.sid,
+                file_props.received_len)
         else:
-            ft.set_status(file_props['type'], file_props['sid'], 'stop')
-        if 'stalled' in file_props and file_props['stalled'] or \
-                'paused' in file_props and file_props['paused']:
+            ft.set_status(file_props, 'stop')
+        if file_props.stalled or file_props.paused:
             return
-        if file_props['type'] == 'r': # we receive a file
-            jid = unicode(file_props['sender'])
-        else: # we send a file
-            jid = unicode(file_props['receiver'])
 
+        if file_props.type_ == 'r' and file_props.hash_: # we receive a file
+            gajim.socks5queue.remove_receiver(file_props.sid, True, True)
+            # we compare hashes
+            if file_props.session_type == 'jingle':
+                # Compare hashes in a new thread
+                self.hashThread = Thread(target=self.__compare_hashes,
+                    args=(account, file_props))
+                self.hashThread.start()
+        else: # we send a file
+            jid = unicode(file_props.receiver)
+            gajim.socks5queue.remove_sender(file_props.sid, True, True)
+            self.popup_ft_result(account, jid, file_props)
+
+    def popup_ft_result(self, account, jid, file_props):
+        ft = self.instances['file_transfers']
         if helpers.allow_popup_window(account):
-            if file_props['error'] == 0:
+            if file_props.error == 0:
                 if gajim.config.get('notify_on_file_complete'):
                     ft.show_completed(jid, file_props)
-            elif file_props['error'] == -1:
+            elif file_props.error == -1:
                 ft.show_stopped(jid, file_props,
                         error_msg=_('Remote contact stopped transfer'))
-            elif file_props['error'] == -6:
+            elif file_props.error == -6:
                 ft.show_stopped(jid, file_props,
                     error_msg=_('Error opening file'))
+            elif file_props.error == -10:
+                ft.show_hash_error(jid, file_props, account)
+            elif file_props.error == -12:
+                ft.show_stopped(jid, file_props,
+                    error_msg=_('SSL certificate error'))
             return
 
         msg_type = ''
         event_type = ''
-        if file_props['error'] == 0 and gajim.config.get(
+        if file_props.error == 0 and gajim.config.get(
         'notify_on_file_complete'):
             msg_type = 'file-completed'
             event_type = _('File Transfer Completed')
-        elif file_props['error'] in (-1, -6):
+        elif file_props.error in (-1, -6):
             msg_type = 'file-stopped'
             event_type = _('File Transfer Stopped')
+        elif file_props.error  == -10:
+            msg_type = 'file-hash-error'
+            event_type = _('File Transfer Failed')
 
         if event_type == '':
             # FIXME: ugly workaround (this can happen Gajim sent, Gaim recvs)
@@ -948,36 +1052,44 @@ class Interface:
             self.add_event(account, jid, msg_type, file_props)
 
         if file_props is not None:
-            if file_props['type'] == 'r':
+            if file_props.type_ == 'r':
                 # get the name of the sender, as it is in the roster
-                sender = unicode(file_props['sender']).split('/')[0]
+                sender = unicode(file_props.sender).split('/')[0]
                 name = gajim.contacts.get_first_contact_from_jid(account,
-                        sender).get_shown_name()
-                filename = os.path.basename(file_props['file-name'])
+                    sender).get_shown_name()
+                filename = os.path.basename(file_props.file_name)
                 if event_type == _('File Transfer Completed'):
                     txt = _('You successfully received %(filename)s from '
                         '%(name)s.') % {'filename': filename, 'name': name}
                     img_name = 'gajim-ft_done'
-                else: # ft stopped
+                elif event_type == _('File Transfer Stopped'):
                     txt = _('File transfer of %(filename)s from %(name)s '
                         'stopped.') % {'filename': filename, 'name': name}
                     img_name = 'gajim-ft_stopped'
+                else: # ft hash error
+                    txt = _('File transfer of %(filename)s from %(name)s '
+                        'failed.') % {'filename': filename, 'name': name}
+                    img_name = 'gajim-ft_stopped'
             else:
-                receiver = file_props['receiver']
+                receiver = file_props.receiver
                 if hasattr(receiver, 'jid'):
                     receiver = receiver.jid
                 receiver = receiver.split('/')[0]
                 # get the name of the contact, as it is in the roster
                 name = gajim.contacts.get_first_contact_from_jid(account,
-                        receiver).get_shown_name()
-                filename = os.path.basename(file_props['file-name'])
+                    receiver).get_shown_name()
+                filename = os.path.basename(file_props.file_name)
                 if event_type == _('File Transfer Completed'):
                     txt = _('You successfully sent %(filename)s to %(name)s.')\
-                            % {'filename': filename, 'name': name}
+                        % {'filename': filename, 'name': name}
                     img_name = 'gajim-ft_done'
-                else: # ft stopped
+                elif event_type == _('File Transfer Stopped'):
                     txt = _('File transfer of %(filename)s to %(name)s '
                         'stopped.') % {'filename': filename, 'name': name}
+                    img_name = 'gajim-ft_stopped'
+                else: # ft hash error
+                    txt = _('File transfer of %(filename)s to %(name)s '
+                        'failed.') % {'filename': filename, 'name': name}
                     img_name = 'gajim-ft_stopped'
             path = gtkgui_helpers.get_icon_path(img_name, 48)
         else:
@@ -985,8 +1097,8 @@ class Interface:
             path = ''
 
         if gajim.config.get('notify_on_file_complete') and \
-                (gajim.config.get('autopopupaway') or \
-                gajim.connections[account].connected in (2, 3)):
+        (gajim.config.get('autopopupaway') or \
+        gajim.connections[account].connected in (2, 3)):
             # we want to be notified and we are online/chat or we don't mind
             # bugged when away/na/busy
             notify.popup(event_type, jid, account, msg_type, path_to_image=path,
@@ -1066,7 +1178,7 @@ class Interface:
         dlg = dialogs.InputDialog(_('Username Conflict'),
             _('Please type a new username for your local account'),
             input_str=obj.alt_name, is_modal=True, ok_handler=on_ok,
-            cancel_handler=on_cancel)
+            cancel_handler=on_cancel, transient_for=self.roster.window)
 
     def handle_event_resource_conflict(self, obj):
         # ('RESOURCE_CONFLICT', account, ())
@@ -1083,6 +1195,16 @@ class Interface:
             _('You are already connected to this account with the same '
             'resource. Please type a new one'), resource=proposed_resource,
             ok_handler=on_ok)
+
+    def handle_event_jingleft_cancel(self, obj):
+        ft = self.instances['file_transfers']
+        file_props = None
+        # get the file_props of our session
+        file_props = FilesProp.getFileProp(obj.conn.name, obj.sid)
+        ft.set_status(file_props, 'stop')
+        file_props.error = -4 # is it the right error code?
+        ft.show_stopped(obj.jid, file_props, 'Peer cancelled ' +
+                            'the transfer')
 
     def handle_event_jingle_incoming(self, obj):
         # ('JINGLE_INCOMING', account, peer jid, sid, tuple-of-contents==(type,
@@ -1232,6 +1354,8 @@ class Interface:
             dialogs.SSLErrorDialog(obj.conn.name, obj.certificate, pritext,
             sectext, checktext1, checktext2, on_response_ok=on_ok,
             on_response_cancel=on_cancel)
+        self.instances[account]['online_dialog']['ssl_error'].set_title(
+            _('SSL Certificate Verification for %s') % account)
 
     def handle_event_fingerprint_error(self, obj):
         # ('FINGERPRINT_ERROR', account, (new_fingerprint,))
@@ -1290,23 +1414,11 @@ class Interface:
             gajim.nec.push_incoming_event(OurShowEvent(None, conn=obj.conn,
                 show='offline'))
 
-        pritext = _('Insecure connection')
-        sectext = _('You are about to connect to the account %(account)s '
-            '(%(server)s) with an insecure connection. This means all your '
-            'conversations will be exchanged unencrypted. This type of '
-            'connection is really discouraged.\nAre you sure you want to do '
-            'that?') % {'account': obj.conn.name,
-            'server': gajim.get_hostname_from_account(obj.conn.name)}
-        checktext1 = _('Yes, I really want to connect insecurely')
-        tooltip1 = _('Gajim will NOT connect unless you check this box')
-        checktext2 = _('_Do not ask me again')
         if 'plain_connection' in self.instances[obj.conn.name]['online_dialog']:
             self.instances[obj.conn.name]['online_dialog']['plain_connection'].\
                 destroy()
         self.instances[obj.conn.name]['online_dialog']['plain_connection'] = \
-            dialogs.ConfirmationDialogDoubleCheck(pritext, sectext, checktext1,
-            checktext2, tooltip1=tooltip1, on_response_ok=on_ok,
-            on_response_cancel=on_cancel, is_modal=False)
+            dialogs.PlainConnectionDialog(obj.conn.name, on_ok, on_cancel)
 
     def handle_event_insecure_ssl_connection(self, obj):
         # ('INSECURE_SSL_CONNECTION', account, (connection, connection_type))
@@ -1405,6 +1517,7 @@ class Interface:
             'file-request-received': [self.handle_event_file_request],
             'fingerprint-error': [self.handle_event_fingerprint_error],
             'gc-invitation-received': [self.handle_event_gc_invitation],
+            'gc-decline-received': [self.handle_event_gc_decline],
             'gc-presence-received': [self.handle_event_gc_presence],
             'gc-message-received': [self.handle_event_gc_message],
             'gmail-notify': [self.handle_event_gmail_notify],
@@ -1421,6 +1534,7 @@ class Interface:
                 self.handle_event_jingle_disconnected],
             'jingle-error-received': [self.handle_event_jingle_error],
             'jingle-request-received': [self.handle_event_jingle_incoming],
+            'jingleFT-cancelled-received': [self.handle_event_jingleft_cancel],
             'last-result-received': [self.handle_event_last_status_time],
             'message-error': [self.handle_event_msgerror],
             'message-not-sent': [self.handle_event_msgnotsent],
@@ -1428,6 +1542,7 @@ class Interface:
             'metacontacts-received': [self.handle_event_metacontacts],
             'muc-admin-received': [self.handle_event_gc_affiliation],
             'muc-owner-received': [self.handle_event_gc_config],
+            'oauth2-credentials-required': [self.handle_oauth2_credentials],
             'our-show': [self.handle_event_status],
             'password-required': [self.handle_event_password_required],
             'plain-connection': [self.handle_event_plain_connection],
@@ -1478,7 +1593,7 @@ class Interface:
         no_queue = len(gajim.events.get_events(account, jid)) == 0
         # type_ can be gc-invitation file-send-error file-error
         #  file-request-error file-request file-completed file-stopped
-        #  jingle-incoming
+        #  file-hash-error jingle-incoming
         # event_type can be in advancedNotificationWindow.events_list
         event_types = {'file-request': 'ft_request',
             'file-completed': 'ft_finished'}
@@ -1576,6 +1691,8 @@ class Interface:
             event = gajim.events.get_first_event(account, fjid, type_)
             if not event:
                 event = gajim.events.get_first_event(account, jid, type_)
+            if not event:
+                return
 
             if type_ == 'printed_pm':
                 ctrl = event.parameters[2]
@@ -1607,7 +1724,7 @@ class Interface:
             w = ctrl.parent_win
         elif type_ in ('normal', 'file-request', 'file-request-error',
         'file-send-error', 'file-error', 'file-stopped', 'file-completed',
-        'jingle-incoming'):
+        'file-hash-error', 'jingle-incoming'):
             # Get the first single message event
             event = gajim.events.get_first_event(account, fjid, type_)
             if not event:
@@ -1742,16 +1859,10 @@ class Interface:
             r'(?<!\S)' r'/[^\s/]' r'([^/]*[^\s/])?' r'/(?!\S)|'\
             r'(?<!\w)' r'_[^\s_]' r'([^_]*[^\s_])?' r'_(?!\w)'
 
-        latex = r'|\$\$[^$\\]*?([\]\[0-9A-Za-z()|+*/-]|'\
-            r'[\\][\]\[0-9A-Za-z()|{}$])(.*?[^\\])?\$\$'
-
         basic_pattern = links + '|' + mail + '|' + legacy_prefixes
 
         link_pattern = basic_pattern
         self.link_pattern_re = re.compile(link_pattern, re.I | re.U)
-
-        if gajim.config.get('use_latex'):
-            basic_pattern += latex
 
         if gajim.config.get('ascii_formatting'):
             basic_pattern += formatting
@@ -1849,13 +1960,16 @@ class Interface:
         self.emoticons = dict()
         self.emoticons_animations = dict()
 
-        sys.path.append(path)
+        sys.path.insert(0, path)
         import emoticons
-        if need_reload:
-            # we need to reload else that doesn't work when changing emoticon
-            # set
-            reload(emoticons)
-        emots = emoticons.emoticons
+        try:
+            if need_reload:
+                # we need to reload else that doesn't work when changing emoticon
+                # set
+                reload(emoticons)
+            emots = emoticons.emoticons
+        except Exception, e:
+            return True
         for emot_filename in emots:
             emot_file = os.path.join(path, emot_filename)
             if not self.image_is_ok(emot_file):
@@ -1880,6 +1994,10 @@ class Interface:
         if not emot_theme:
             return
 
+        transient_for = None
+        if 'preferences' in gajim.interface.instances:
+            transient_for = gajim.interface.instances['preferences'].window
+
         path = os.path.join(gajim.DATA_DIR, 'emoticons', emot_theme)
         if not os.path.exists(path):
             # It's maybe a user theme
@@ -1888,10 +2006,18 @@ class Interface:
                 # theme doesn't exist, disable emoticons
                 dialogs.WarningDialog(_('Emoticons disabled'),
                     _('Your configured emoticons theme has not been found, so '
-                    'emoticons have been disabled.'))
+                    'emoticons have been disabled.'),
+                    transient_for=transient_for)
                 gajim.config.set('emoticons_theme', '')
                 return
-        self._init_emoticons(path, need_reload)
+        if self._init_emoticons(path, need_reload):
+            dialogs.WarningDialog(_('Emoticons disabled'),
+                    _('Your configured emoticons theme cannot been loaded. You '
+                    'maybe need to update the format of emoticons.py file. See '
+                    'http://trac.gajim.org/wiki/Emoticons for more details.'),
+                    transient_for=transient_for)
+            gajim.config.set('emoticons_theme', '')
+            return
         if len(self.emoticons) == 0:
             # maybe old format of emoticons file, try to convert it
             try:
@@ -1912,7 +2038,9 @@ class Interface:
                 dialogs.WarningDialog(_('Emoticons disabled'),
                     _('Your configured emoticons theme cannot been loaded. You '
                     'maybe need to update the format of emoticons.py file. See '
-                    'http://trac.gajim.org/wiki/Emoticons for more details.'))
+                    'http://trac.gajim.org/wiki/Emoticons for more details.'),
+                    transient_for=transient_for)
+                gajim.config.set('emoticons_theme', '')
         if self.emoticons_menu:
             self.emoticons_menu.destroy()
         self.emoticons_menu = self.prepare_emoticons_menu()
@@ -2496,6 +2624,40 @@ class Interface:
 
         return gc_ctrl and gc_ctrl.type_id == message_control.TYPE_GC
 
+    def get_pep_icon(self, pep_obj):
+        if isinstance(pep_obj, pep.UserMoodPEP):
+            received_mood = pep_obj._pep_specific_data['mood']
+            mood = received_mood if received_mood in pep.MOODS else 'unknown'
+            return gtkgui_helpers.load_mood_icon(mood).get_pixbuf()
+        elif isinstance(pep_obj, pep.UserTunePEP):
+            icon = gtkgui_helpers.get_icon_pixmap('audio-x-generic', quiet=True)
+            if not icon:
+                icon = os.path.join(gajim.DATA_DIR, 'emoticons', 'static', 'music.png')
+                return gtk.gdk.pixbuf_new_from_file(icon)
+            return icon
+        elif isinstance(pep_obj, pep.UserActivityPEP):
+            pep_ = pep_obj._pep_specific_data
+            activity = pep_['activity']
+
+            has_known_activity = activity in pep.ACTIVITIES
+            has_known_subactivity = (has_known_activity  and ('subactivity' in
+                pep_) and (pep_['subactivity'] in pep.ACTIVITIES[activity]))
+
+            if has_known_activity:
+                if has_known_subactivity:
+                    subactivity = pep_['subactivity']
+                    return gtkgui_helpers.load_activity_icon(activity,
+                        subactivity).get_pixbuf()
+                else:
+                    return gtkgui_helpers.load_activity_icon(activity).\
+                        get_pixbuf()
+            else:
+                return gtkgui_helpers.load_activity_icon('unknown').get_pixbuf()
+        elif isinstance(pep_obj, pep.UserLocationPEP):
+            icon = gtkgui_helpers.get_icon_pixmap('applications-internet',
+                quiet=True)
+            return icon
+
     def create_ipython_window(self):
         try:
             from ipython_view import IPythonView
@@ -2571,8 +2733,8 @@ class Interface:
         gajim.thread_interface = ThreadInterface
         # This is the manager and factory of message windows set by the module
         self.msg_win_mgr = None
-        self.jabber_state_images = {'16': {}, '32': {}, 'opened': {},
-                'closed': {}}
+        self.jabber_state_images = {'16': {}, '24': {}, '32': {}, 'opened': {},
+            'closed': {}}
         self.emoticons_menu = None
         # handler when an emoticon is clicked in emoticons_menu
         self.emoticon_menuitem_clicked = None
@@ -2589,6 +2751,7 @@ class Interface:
                 'outmsgtxtcolor': gajim.config.get('outmsgtxtcolor'),
                 'statusmsgcolor': gajim.config.get('statusmsgcolor'),
                 'urlmsgcolor': gajim.config.get('urlmsgcolor'),
+                'markedmsgcolor': gajim.config.get('markedmsgcolor'),
         }
 
         self.handlers = {}
@@ -2609,9 +2772,9 @@ class Interface:
 
         cfg_was_read = parser.read()
 
-        from common import latex
-        gajim.HAVE_LATEX = gajim.config.get('use_latex') and \
-                latex.check_for_latex_support()
+        if not cfg_was_read:
+            # enable plugin_installer by default when creating config file
+            gajim.config.set_per('plugins', 'plugin_installer', 'active', True)
 
         gajim.logger.reset_shown_unread_messages()
         # override logging settings from config (don't take care of '-q' option)
@@ -2757,6 +2920,7 @@ class Interface:
 
         if dbus_support.supported:
             import upower_listener
+            import logind_listener
 
         # Handle gnome screensaver
         if dbus_support.supported:
@@ -2848,11 +3012,15 @@ class Interface:
 
         if gajim.config.get('soundplayer') == '':
             # only on first time Gajim starts
-            commands = ('aplay', 'play', 'esdplay', 'artsplay', 'ossplay')
+            commands = ('paplay', 'aplay', 'play', 'ossplay')
             for command in commands:
                 if helpers.is_in_path(command):
-                    if command == 'aplay':
+                    if command == 'paplay':
+                        command += ' -n gajim'
+                    if command in ('aplay', 'play'):
                         command += ' -q'
+                    elif command == 'ossplay':
+                        command += ' -qq'
                     gajim.config.set('soundplayer', command)
                     break
 
@@ -2904,7 +3072,7 @@ class PassphraseRequest:
 
     def create_dialog(self, account):
         title = _('Passphrase Required')
-        second = _('Enter GPG key passphrase for key %(keyid)s (account '
+        second = _('Enter OpenPGP key passphrase for key %(keyid)s (account '
             '%(account)s).') % {'keyid': self.keyid, 'account': account}
 
         def _cancel():
@@ -2918,9 +3086,9 @@ class PassphraseRequest:
                 self.complete(passphrase)
                 return
             elif result == 'expired':
-                dialogs.ErrorDialog(_('GPG key expired'),
-                    _('Your GPG key has expired, you will be connected to %s '
-                    'without OpenPGP.') % account)
+                dialogs.ErrorDialog(_('OpenPGP key expired'),
+                    _('Your OpenPGP key has expired, you will be connected to '
+                    '%s without OpenPGP.') % account)
                 # Don't try to connect with GPG
                 gajim.connections[account].continue_connect_info[2] = False
                 self.complete(None)
@@ -2929,7 +3097,7 @@ class PassphraseRequest:
             if count < 3:
                 # ask again
                 dialogs.PassphraseDialog(_('Wrong Passphrase'),
-                    _('Please retype your GPG passphrase or press Cancel.'),
+                    _('Please retype your OpenPGP passphrase or press Cancel.'),
                     ok_handler=(_ok, count + 1), cancel_handler=_cancel)
             else:
                 # user failed 3 times, continue without GPG

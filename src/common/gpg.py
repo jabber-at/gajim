@@ -1,6 +1,6 @@
 ## src/common/gpg.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005 Alex Mauer <hawke AT hawkesnest.net>
 ## Copyright (C) 2005-2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2007 Stephan Erb <steve-e AT h3c.de>
@@ -31,10 +31,10 @@ if HAVE_GPG:
     class GnuPG(gnupg.GPG):
         def __init__(self, use_agent=False):
             gnupg.GPG.__init__(self)
-            gnupg.GPG.decode_errors = 'replace'
+            self.decode_errors = 'replace'
             self.passphrase = None
             self.use_agent = use_agent
-            self.always_trust = False
+            self.always_trust = [] # list of keyID to always trust
 
         def _setup_my_options(self):
             self.options.armor = 1
@@ -47,8 +47,14 @@ if HAVE_GPG:
                 self.options.extra_args.append('--use-agent')
 
         def encrypt(self, str_, recipients, always_trust=False):
+            trust = always_trust
+            if not trust:
+                trust = True
+                for key in recipients:
+                    if key not in self.always_trust:
+                        trust = False
             result = super(GnuPG, self).encrypt(str_, recipients,
-                always_trust=always_trust, passphrase=self.passphrase)
+                always_trust=trust, passphrase=self.passphrase)
 
             if result.status == 'invalid recipient':
                 return '', 'NOT_TRUSTED'
@@ -80,14 +86,21 @@ if HAVE_GPG:
         def verify(self, str_, sign):
             if str_ is None:
                 return ''
-            data = '-----BEGIN PGP SIGNED MESSAGE-----' + os.linesep
-            data = data + 'Hash: SHA1' + os.linesep + os.linesep
-            data = data + str_ + os.linesep
-            data = data + self._addHeaderFooter(sign, 'SIGNATURE')
-            result = super(GnuPG, self).verify(data)
+            # Hash algorithm is not transfered in the signed presence stanza so try
+            # all algorithms. Text name for hash algorithms from RFC 4880 - section 9.4
+            hash_algorithms = ['SHA512', 'SHA384', 'SHA256', 'SHA224', 'SHA1', 'RIPEMD160']
+            for algo in hash_algorithms:
+                data = os.linesep.join(
+                    ['-----BEGIN PGP SIGNED MESSAGE-----',
+                     'Hash: ' + algo,
+                     '',
+                     str_,
+                     self._addHeaderFooter(sign, 'SIGNATURE')]
+                    )
+                result = super(GnuPG, self).verify(data)
+                if result.valid:
+                    return result.key_id
 
-            if result.valid:
-                return result.key_id
             return ''
 
         def get_keys(self, secret=False):

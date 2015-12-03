@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2007 Tomasz Melcer <liori AT exroot.org>
 ##                    Travis Shirk <travis AT pobox.com>
-## Copyright (C) 2007-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2007-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2008 Brendan Taylor <whateley AT gmail.com>
 ##                    Jonathan Schleifer <js-gajim AT webkeks.org>
 ## Copyright (C) 2008-2009 Stephan Erb <steve-e AT h3c.de>
@@ -37,11 +37,13 @@ import hashlib
 import logging
 log = logging.getLogger('gajim.c.caps_cache')
 
-from common.xmpp import (NS_XHTML_IM, NS_RECEIPTS, NS_ESESSION, NS_CHATSTATES,
-        NS_JINGLE_ICE_UDP, NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO, NS_CAPS)
+from nbxmpp import (NS_XHTML_IM, NS_RECEIPTS, NS_ESESSION, NS_CHATSTATES,
+    NS_JINGLE_ICE_UDP, NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO, NS_CAPS,
+    NS_JINGLE_FILE_TRANSFER)
 # Features where we cannot safely assume that the other side supports them
 FEATURE_BLACKLIST = [NS_CHATSTATES, NS_XHTML_IM, NS_RECEIPTS, NS_ESESSION,
-        NS_JINGLE_ICE_UDP, NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO]
+    NS_JINGLE_ICE_UDP, NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO,
+    NS_JINGLE_FILE_TRANSFER]
 
 # Query entry status codes
 NEW = 0
@@ -96,7 +98,7 @@ def compute_caps_hash(identities, features, dataforms=[], hash_method='sha-1'):
     """
     Compute caps hash according to XEP-0115, V1.5
 
-    dataforms are xmpp.DataForms objects as common.dataforms don't allow several
+    dataforms are nbxmpp.DataForms objects as common.dataforms don't allow several
     values without a field type list-multi
     """
     def sort_identities_func(i1, i2):

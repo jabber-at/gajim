@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/stanza_session.py
 ##
-## Copyright (C) 2007-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2007-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Julien Pivotto <roidelapluie AT gmail.com>
 ## Copyright (C) 2007-2008 Brendan Taylor <whateley AT gmail.com>
 ##                         Jean-Marie Traissard <jim AT lapin.org>
@@ -23,9 +23,9 @@
 ##
 
 from common import gajim
-from common import xmpp
+import nbxmpp
 from common.exceptions import DecryptionError, NegotiationError
-import xmpp.c14n
+import nbxmpp.c14n
 
 import itertools
 import random
@@ -57,7 +57,7 @@ class StanzaSession(object):
         '''
         self.conn = conn
         self.jid = jid
-        self.type = type_
+        self.type_ = type_
         self.resource = jid.getResource()
 
         if thread_id:
@@ -83,9 +83,7 @@ class StanzaSession(object):
 
     def get_to(self):
         to = str(self.jid)
-        if self.resource and not to.endswith(self.resource):
-            to += '/' + self.resource
-        return to
+        return gajim.get_jid_without_resource(to) +  '/' + self.resource
 
     def remove_events(self, types):
         """
@@ -123,17 +121,18 @@ class StanzaSession(object):
         msg.setAttr('to', self.get_to())
         self.conn.send_stanza(msg)
 
-        if isinstance(msg, xmpp.Message):
+        if isinstance(msg, nbxmpp.Message):
             self.last_send = time.time()
 
     def reject_negotiation(self, body=None):
-        msg = xmpp.Message()
+        msg = nbxmpp.Message()
         feature = msg.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        x = xmpp.DataForm(typ='submit')
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn'))
-        x.addChild(node=xmpp.DataField(name='accept', value='0'))
+        x = nbxmpp.DataForm(typ='submit')
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
+            value='urn:xmpp:ssn'))
+        x.addChild(node=nbxmpp.DataField(name='accept', value='0'))
 
         feature.addChild(node=x)
 
@@ -160,13 +159,14 @@ class StanzaSession(object):
         # have XEP-0201 support
         if send_termination and self.last_send > 0 and \
         (self.received_thread_id or self.last_receive == 0):
-            msg = xmpp.Message()
+            msg = nbxmpp.Message()
             feature = msg.NT.feature
-            feature.setNamespace(xmpp.NS_FEATURE)
+            feature.setNamespace(nbxmpp.NS_FEATURE)
 
-            x = xmpp.DataForm(typ='submit')
-            x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn'))
-            x.addChild(node=xmpp.DataField(name='terminate', value='1'))
+            x = nbxmpp.DataForm(typ='submit')
+            x.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
+                value='urn:xmpp:ssn'))
+            x.addChild(node=nbxmpp.DataField(name='terminate', value='1'))
 
             feature.addChild(node=x)
 
@@ -190,24 +190,24 @@ class ArchivingStanzaSession(StanzaSession):
     def negotiate_archiving(self):
         self.negotiated = {}
 
-        request = xmpp.Message()
+        request = nbxmpp.Message()
         feature = request.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        x = xmpp.DataForm(typ='form')
+        x = nbxmpp.DataForm(typ='form')
 
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn',
-                typ='hidden'))
-        x.addChild(node=xmpp.DataField(name='accept', value='1', typ='boolean',
-                required=True))
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn',
+            typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='accept', value='1',
+            typ='boolean', required=True))
 
-        x.addChild(node=xmpp.DataField(name='logging', typ='list-single',
-                options=self.archiving_logging_preference(), required=True))
+        x.addChild(node=nbxmpp.DataField(name='logging', typ='list-single',
+            options=self.archiving_logging_preference(), required=True))
 
-        x.addChild(node=xmpp.DataField(name='disclosure', typ='list-single',
-                options=['never'], required=True))
-        x.addChild(node=xmpp.DataField(name='security', typ='list-single',
-                options=['none'], required=True))
+        x.addChild(node=nbxmpp.DataField(name='disclosure', typ='list-single',
+            options=['never'], required=True))
+        x.addChild(node=nbxmpp.DataField(name='security', typ='list-single',
+            options=['none'], required=True))
 
         feature.addChild(node=x)
 
@@ -223,27 +223,28 @@ class ArchivingStanzaSession(StanzaSession):
         logging = self.archiving_logging_preference(options)
         self.negotiated['logging'] = logging
 
-        response = xmpp.Message()
+        response = nbxmpp.Message()
         feature = response.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        x = xmpp.DataForm(typ='submit')
+        x = nbxmpp.DataForm(typ='submit')
 
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn'))
-        x.addChild(node=xmpp.DataField(name='accept', value='true'))
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
+            value='urn:xmpp:ssn'))
+        x.addChild(node=nbxmpp.DataField(name='accept', value='true'))
 
-        x.addChild(node=xmpp.DataField(name='logging', value=logging))
+        x.addChild(node=nbxmpp.DataField(name='logging', value=logging))
 
         self.status = 'responded-archiving'
 
         feature.addChild(node=x)
 
         if not logging:
-            response = xmpp.Error(response, xmpp.ERR_NOT_ACCEPTABLE)
+            response = nbxmpp.Error(response, nbxmpp.ERR_NOT_ACCEPTABLE)
 
-            feature = xmpp.Node(xmpp.NS_FEATURE + ' feature')
+            feature = nbxmpp.Node(nbxmpp.NS_FEATURE + ' feature')
 
-            n = xmpp.Node('field')
+            n = nbxmpp.Node('field')
             n['var'] = 'logging'
             feature.addChild(node=n)
 
@@ -270,15 +271,15 @@ class ArchivingStanzaSession(StanzaSession):
 
         self.negotiated['logging'] = form['logging']
 
-        accept = xmpp.Message()
+        accept = nbxmpp.Message()
         feature = accept.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        result = xmpp.DataForm(typ='result')
+        result = nbxmpp.DataForm(typ='result')
 
-        result.addChild(node=xmpp.DataField(name='FORM_TYPE',
+        result.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
                 value='urn:xmpp:ssn'))
-        result.addChild(node=xmpp.DataField(name='accept', value='1'))
+        result.addChild(node=nbxmpp.DataField(name='accept', value='1'))
 
         feature.addChild(node=result)
 
@@ -346,7 +347,7 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
 
     def _is_buggy_gajim(self):
         c = self._get_contact()
-        if c and c.supports(xmpp.NS_ROSTERX):
+        if c and c.supports(nbxmpp.NS_ROSTERX):
             return False
         return True
 
@@ -409,27 +410,27 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
 
         c = stanza.NT.c
         c.setNamespace('http://www.xmpp.org/extensions/xep-0200.html#ns')
-        c.NT.data = base64.b64encode(m_final)
+        c.NT.data = base64.b64encode(m_final).decode('utf-8')
 
         # FIXME check for rekey request, handle <key/> elements
 
-        m_content = ''.join(map(str, c.getChildren()))
+        m_content = (''.join(map(str, c.getChildren()))).encode('utf-8')
         c.NT.mac = base64.b64encode(self.hmac(self.km_s, m_content + \
-                crypto.encode_mpi(old_en_counter)))
+            crypto.encode_mpi(old_en_counter))).decode('utf-8')
 
         msgtxt = '[This is part of an encrypted session. ' \
                 'If you see this message, something went wrong.]'
         lang = os.getenv('LANG')
         if lang is not None and lang != 'en': # we're not english
             msgtxt = _('[This is part of an encrypted session. '
-                    'If you see this message, something went wrong.]') + ' (' + \
-                    msgtxt + ')'
+                'If you see this message, something went wrong.]') + ' (' + \
+                msgtxt + ')'
         stanza.setBody(msgtxt)
 
         return stanza
 
     def is_xep_200_encrypted(self, msg):
-        msg.getTag('c', namespace=xmpp.NS_STANZA_CRYPTO)
+        msg.getTag('c', namespace=nbxmpp.NS_STANZA_CRYPTO)
 
     def hmac(self, key, content):
         return HMAC(key, content, self.hash_alg).digest()
@@ -472,6 +473,7 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
 
         # contents of <c>, minus <mac>, minus whitespace
         macable = ''.join(str(x) for x in c.getChildren() if x.getName() != 'mac')
+        macable = macable.encode('utf-8')
 
         received_mac = base64.b64decode(c.getTagData('mac'))
         calculated_mac = self.hmac(self.km_o, macable + \
@@ -482,10 +484,10 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
 
         m_final = base64.b64decode(c.getTagData('data'))
         m_compressed = self.decrypt(m_final)
-        plaintext = self.decompress(m_compressed)
+        plaintext = self.decompress(m_compressed).decode('utf-8')
 
         try:
-            parsed = xmpp.Node(node='<node>' + plaintext + '</node>')
+            parsed = nbxmpp.Node(node='<node>' + plaintext + '</node>')
         except Exception:
             raise DecryptionError('decrypted <data/> not parseable as XML')
 
@@ -519,7 +521,7 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
     def c7lize_mac_id(self, form):
         kids = form.getChildren()
         macable = [x for x in kids if x.getVar() not in ('mac', 'identity')]
-        return ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for el in \
+        return ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) for el in \
                 macable)
 
     def verify_identity(self, form, dh_i, sigmai, i_o):
@@ -535,11 +537,11 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         if i_o == 'a' and self.sas_algs == 'sas28x5':
             # we don't need to calculate this if there's a verified retained secret
             # (but we do anyways)
-            self.sas = crypto.sas_28x5(m_o, self.form_s)
+            self.sas = crypto.sas_28x5(m_o, self.form_s.encode('utf-8'))
 
         if self.negotiated['recv_pubkey']:
             plaintext = self.decrypt(id_o)
-            parsed = xmpp.Node(node='<node>' + plaintext + '</node>')
+            parsed = nbxmpp.Node(node='<node>' + plaintext + '</node>')
 
             if self.negotiated['recv_pubkey'] == 'hash':
                 # fingerprint = parsed.getTagData('fingerprint')
@@ -553,7 +555,7 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
                             keyvalue.getTagData(x))) for x in ('Modulus', 'Exponent'))
                     eir_pubkey = RSA.construct((n, long(e)))
 
-                    pubkey_o = xmpp.c14n.c14n(keyvalue, self._is_buggy_gajim())
+                    pubkey_o = nbxmpp.c14n.c14n(keyvalue, self._is_buggy_gajim())
                 else:
                     # FIXME DSA, etc.
                     raise NotImplementedError()
@@ -570,11 +572,11 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         content = self.n_s + self.n_o + crypto.encode_mpi(dh_i) + pubkey_o
 
         if sigmai:
-            self.form_o = c7l_form
+            self.form_o = c7l_form.encode('utf-8')
             content += self.form_o
         else:
-            form_o2 = c7l_form
-            content += self.form_o + form_o2
+            form_o2 = c7l_form.encode('utf-8')
+            content += self.form_o.encode('utf-8') + form_o2
 
         mac_o_calculated = self.hmac(self.ks_o, content)
 
@@ -595,20 +597,20 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
                 fields = (pubkey.n, pubkey.e)
 
                 cb_fields = [base64.b64encode(crypto.encode_mpi(f)) for f in
-                        fields]
+                    fields]
 
                 pubkey_s = '<RSAKeyValue xmlns="http://www.w3.org/2000/09/xmldsig#"'
                 '><Modulus>%s</Modulus><Exponent>%s</Exponent></RSAKeyValue>' % \
-                        tuple(cb_fields)
+                    tuple(cb_fields)
         else:
             pubkey_s = ''
 
-        form_s2 = ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for el in \
-                form.getChildren())
+        form_s2 = ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) for el \
+            in form.getChildren())
 
         old_c_s = self.c_s
         content = self.n_o + self.n_s + crypto.encode_mpi(dh_i) + pubkey_s + \
-                self.form_s + form_s2
+            self.form_s.encode('utf-8') + form_s2.encode('utf-8')
 
         mac_s = self.hmac(self.ks_s, content)
 
@@ -631,82 +633,84 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         if self.status == 'requested-e2e' and self.sas_algs == 'sas28x5':
             # we're alice; check for a retained secret
             # if none exists, prompt the user with the SAS
-            self.sas = crypto.sas_28x5(m_s, self.form_o)
+            self.sas = crypto.sas_28x5(m_s, self.form_o.encode('utf-8'))
 
             if self.sigmai:
                 # FIXME save retained secret?
                 self.check_identity(tuple)
 
-        return (xmpp.DataField(name='identity', value=base64.b64encode(id_s)),
-                xmpp.DataField(name='mac', value=base64.b64encode(m_s)))
+        return (nbxmpp.DataField(name='identity',
+            value=base64.b64encode(id_s).decode('utf-8')),
+            nbxmpp.DataField(name='mac',
+            value=base64.b64encode(m_s).decode('utf-8')))
 
     def negotiate_e2e(self, sigmai):
         self.negotiated = {}
 
-        request = xmpp.Message()
+        request = nbxmpp.Message()
         feature = request.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        x = xmpp.DataForm(typ='form')
+        x = nbxmpp.DataForm(typ='form')
 
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn',
-                typ='hidden'))
-        x.addChild(node=xmpp.DataField(name='accept', value='1', typ='boolean',
-                required=True))
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn',
+            typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='accept', value='1',
+            typ='boolean', required=True))
 
         # this field is incorrectly called 'otr' in XEPs 0116 and 0217
-        x.addChild(node=xmpp.DataField(name='logging', typ='list-single',
-                options=self.logging_preference(), required=True))
+        x.addChild(node=nbxmpp.DataField(name='logging', typ='list-single',
+            options=self.logging_preference(), required=True))
 
         # unsupported options: 'disabled', 'enabled'
-        x.addChild(node=xmpp.DataField(name='disclosure', typ='list-single',
-                options=['never'], required=True))
-        x.addChild(node=xmpp.DataField(name='security', typ='list-single',
-                options=['e2e'], required=True))
-        x.addChild(node=xmpp.DataField(name='crypt_algs', value='aes128-ctr',
-                typ='hidden'))
-        x.addChild(node=xmpp.DataField(name='hash_algs', value='sha256',
-                typ='hidden'))
-        x.addChild(node=xmpp.DataField(name='compress', value='none',
-                typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='disclosure', typ='list-single',
+            options=['never'], required=True))
+        x.addChild(node=nbxmpp.DataField(name='security', typ='list-single',
+            options=['e2e'], required=True))
+        x.addChild(node=nbxmpp.DataField(name='crypt_algs', value='aes128-ctr',
+            typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='hash_algs', value='sha256',
+            typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='compress', value='none',
+            typ='hidden'))
 
         # unsupported options: 'iq', 'presence'
-        x.addChild(node=xmpp.DataField(name='stanzas', typ='list-multi',
-                options=['message']))
+        x.addChild(node=nbxmpp.DataField(name='stanzas', typ='list-multi',
+            options=['message']))
 
-        x.addChild(node=xmpp.DataField(name='init_pubkey', options=['none', 'key',
-                'hash'], typ='list-single'))
+        x.addChild(node=nbxmpp.DataField(name='init_pubkey', options=['none',
+            'key', 'hash'], typ='list-single'))
 
         # FIXME store key, use hash
-        x.addChild(node=xmpp.DataField(name='resp_pubkey', options=['none',
-                'key'], typ='list-single'))
+        x.addChild(node=nbxmpp.DataField(name='resp_pubkey', options=['none',
+            'key'], typ='list-single'))
 
-        x.addChild(node=xmpp.DataField(name='ver', value='1.0', typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='ver', value='1.0', typ='hidden'))
 
-        x.addChild(node=xmpp.DataField(name='rekey_freq', value='4294967295',
-                typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='rekey_freq', value='4294967295',
+            typ='hidden'))
 
-        x.addChild(node=xmpp.DataField(name='sas_algs', value='sas28x5',
-                typ='hidden'))
-        x.addChild(node=xmpp.DataField(name='sign_algs',
-                value='http://www.w3.org/2000/09/xmldsig#rsa-sha256', typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='sas_algs', value='sas28x5',
+            typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='sign_algs',
+            value='http://www.w3.org/2000/09/xmldsig#rsa-sha256', typ='hidden'))
 
         self.n_s = crypto.generate_nonce()
 
-        x.addChild(node=xmpp.DataField(name='my_nonce',
-                value=base64.b64encode(self.n_s), typ='hidden'))
+        x.addChild(node=nbxmpp.DataField(name='my_nonce',
+            value=base64.b64encode(self.n_s).decode('utf-8'), typ='hidden'))
 
         modp_options = [ int(g) for g in gajim.config.get('esession_modp').split(
-                ',') ]
+            ',') ]
 
-        x.addChild(node=xmpp.DataField(name='modp', typ='list-single',
-                options=[[None, y] for y in modp_options]))
+        x.addChild(node=nbxmpp.DataField(name='modp', typ='list-single',
+            options=[[None, y] for y in modp_options]))
 
         x.addChild(node=self.make_dhfield(modp_options, sigmai))
         self.sigmai = sigmai
 
-        self.form_s = ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for el \
-                in x.getChildren())
+        self.form_s = ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) for \
+            el in x.getChildren())
 
         feature.addChild(node=x)
 
@@ -789,35 +793,43 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         """
         4.3 esession response (bob)
         """
-        response = xmpp.Message()
+        response = nbxmpp.Message()
         feature = response.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        x = xmpp.DataForm(typ='submit')
+        x = nbxmpp.DataForm(typ='submit')
 
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn'))
-        x.addChild(node=xmpp.DataField(name='accept', value='true'))
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
+            value='urn:xmpp:ssn'))
+        x.addChild(node=nbxmpp.DataField(name='accept', value='true'))
 
         for name in negotiated:
             # some fields are internal and should not be sent
             if not name in ('send_pubkey', 'recv_pubkey'):
-                x.addChild(node=xmpp.DataField(name=name, value=negotiated[name]))
+                x.addChild(node=nbxmpp.DataField(name=name,
+                    value=negotiated[name]))
 
         self.negotiated = negotiated
 
         # the offset of the group we chose (need it to match up with the dhhash)
         group_order = 0
-        self.modp = int(form.getField('modp').getOptions()[group_order][1])
-        x.addChild(node=xmpp.DataField(name='modp', value=self.modp))
+        modp_f = form.getField('modp')
+        if not modp_f:
+            return
+        self.modp = int(modp_f.getOptions()[group_order][1])
+        x.addChild(node=nbxmpp.DataField(name='modp', value=self.modp))
 
         g = dh.generators[self.modp]
         p = dh.primes[self.modp]
 
         self.n_o = base64.b64decode(form['my_nonce'])
 
-        dhhashes = form.getField('dhhashes').getValues()
+        dhhashes_f = form.getField('dhhashes')
+        if not dhhashes_f:
+            return
+        dhhashes = dhhashes_f.getValues()
         self.negotiated['He'] = base64.b64decode(dhhashes[group_order].encode(
-                'utf8'))
+            'utf8'))
 
         bytes = int(self.n / 8)
 
@@ -836,25 +848,25 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
                 'nonce': self.n_o}
 
         for name in to_add:
-            b64ed = base64.b64encode(to_add[name])
-            x.addChild(node=xmpp.DataField(name=name, value=b64ed))
+            b64ed = base64.b64encode(to_add[name]).decode('utf-8')
+            x.addChild(node=nbxmpp.DataField(name=name, value=b64ed))
 
-        self.form_o = ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for el \
-                in form.getChildren())
-        self.form_s = ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for el \
-                in x.getChildren())
+        self.form_o = ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) for \
+            el in form.getChildren())
+        self.form_s = ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) for \
+            el in x.getChildren())
 
         self.status = 'responded-e2e'
 
         feature.addChild(node=x)
 
         if not_acceptable:
-            response = xmpp.Error(response, xmpp.ERR_NOT_ACCEPTABLE)
+            response = nbxmpp.Error(response, nbxmpp.ERR_NOT_ACCEPTABLE)
 
-            feature = xmpp.Node(xmpp.NS_FEATURE + ' feature')
+            feature = nbxmpp.Node(nbxmpp.NS_FEATURE + ' feature')
 
             for f in not_acceptable:
-                n = xmpp.Node('field')
+                n = nbxmpp.Node('field')
                 n['var'] = f
                 feature.addChild(node=n)
 
@@ -904,11 +916,11 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
 
         self.negotiated = negotiated
 
-        accept = xmpp.Message()
+        accept = nbxmpp.Message()
         feature = accept.NT.feature
-        feature.setNamespace(xmpp.NS_FEATURE)
+        feature.setNamespace(nbxmpp.NS_FEATURE)
 
-        result = xmpp.DataForm(typ='result')
+        result = nbxmpp.DataForm(typ='result')
 
         self.c_s = crypto.decode_mpi(base64.b64decode(form['counter']))
         self.c_o = self.c_s ^ (2 ** (self.n - 1))
@@ -922,11 +934,11 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         self.d = crypto.decode_mpi(base64.b64decode(form['dhkeys']))
         self.k = self.get_shared_secret(self.d, x, p)
 
-        result.addChild(node=xmpp.DataField(name='FORM_TYPE',
+        result.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
                 value='urn:xmpp:ssn'))
-        result.addChild(node=xmpp.DataField(name='accept', value='1'))
-        result.addChild(node=xmpp.DataField(name='nonce',
-                value=base64.b64encode(self.n_o)))
+        result.addChild(node=nbxmpp.DataField(name='accept', value='1'))
+        result.addChild(node=nbxmpp.DataField(name='nonce',
+                value=base64.b64encode(self.n_o).decode('utf-8')))
 
         self.kc_s, self.km_s, self.ks_s = self.generate_initiator_keys(self.k)
 
@@ -943,13 +955,15 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
                 rshash_size = self.hash_alg().digest_size
                 rshashes.append(crypto.random_bytes(rshash_size))
 
-            rshashes = [base64.b64encode(rshash) for rshash in rshashes]
-            result.addChild(node=xmpp.DataField(name='rshashes', value=rshashes))
-            result.addChild(node=xmpp.DataField(name='dhkeys',
-                    value=base64.b64encode(crypto.encode_mpi(e))))
+            rshashes = [base64.b64encode(rshash).decode('utf-8') for rshash in \
+                rshashes]
+            result.addChild(node=nbxmpp.DataField(name='rshashes',
+                value=rshashes))
+            result.addChild(node=nbxmpp.DataField(name='dhkeys',
+                value=base64.b64encode(crypto.encode_mpi(e)).decode('utf-8')))
 
-            self.form_o = ''.join(xmpp.c14n.c14n(el, self._is_buggy_gajim()) for \
-                    el in form.getChildren())
+            self.form_o = ''.join(nbxmpp.c14n.c14n(el, self._is_buggy_gajim()) \
+                for el in form.getChildren())
 
         # MUST securely destroy K unless it will be used later to generate the
         # final shared secret
@@ -970,12 +984,12 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         """
         4.5 esession accept (bob)
         """
-        response = xmpp.Message()
+        response = nbxmpp.Message()
 
         init = response.NT.init
-        init.setNamespace(xmpp.NS_ESESSION_INIT)
+        init.setNamespace(nbxmpp.NS_ESESSION_INIT)
 
-        x = xmpp.DataForm(typ='result')
+        x = nbxmpp.DataForm(typ='result')
 
         for field in ('nonce', 'dhkeys', 'rshashes', 'identity', 'mac'):
             # FIXME: will do nothing in real world...
@@ -1024,11 +1038,12 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         else:
             srshash = crypto.random_bytes(32)
 
-        x.addChild(node=xmpp.DataField(name='FORM_TYPE', value='urn:xmpp:ssn'))
-        x.addChild(node=xmpp.DataField(name='nonce', value=base64.b64encode(
-                self.n_o)))
-        x.addChild(node=xmpp.DataField(name='srshash', value=base64.b64encode(
-                srshash)))
+        x.addChild(node=nbxmpp.DataField(name='FORM_TYPE',
+            value='urn:xmpp:ssn'))
+        x.addChild(node=nbxmpp.DataField(name='nonce', value=base64.b64encode(
+            self.n_o).decode('utf-8')))
+        x.addChild(node=nbxmpp.DataField(name='srshash', value=base64.b64encode(
+            srshash).decode('utf-8')))
 
         for datafield in self.make_identity(x, self.d):
             x.addChild(node=datafield)
@@ -1144,14 +1159,14 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
             self.es[modp] = e
 
             if sigmai:
-                dhs.append(base64.b64encode(crypto.encode_mpi(e)))
+                dhs.append(base64.b64encode(crypto.encode_mpi(e)).decode('utf-8'))
                 name = 'dhkeys'
             else:
                 He = crypto.sha256(crypto.encode_mpi(e))
-                dhs.append(base64.b64encode(He))
+                dhs.append(base64.b64encode(He).decode('utf-8'))
                 name = 'dhhashes'
 
-        return xmpp.DataField(name=name, typ='hidden', value=dhs)
+        return nbxmpp.DataField(name=name, typ='hidden', value=dhs)
 
     def terminate_e2e(self):
         self.enable_encryption = False
@@ -1170,14 +1185,14 @@ class EncryptedStanzaSession(ArchivingStanzaSession):
         If fields is None, the remote party has given us a bad cryptographic
         value of some kind. Otherwise, list the fields we haven't implemented.
         """
-        err = xmpp.Error(xmpp.Message(), xmpp.ERR_FEATURE_NOT_IMPLEMENTED)
+        err = nbxmpp.Error(nbxmpp.Message(), nbxmpp.ERR_FEATURE_NOT_IMPLEMENTED)
         err.T.error.T.text.setData(reason)
 
         if fields:
-            feature = xmpp.Node(xmpp.NS_FEATURE + ' feature')
+            feature = nbxmpp.Node(nbxmpp.NS_FEATURE + ' feature')
 
             for field in fields:
-                fn = xmpp.Node('field')
+                fn = nbxmpp.Node('field')
                 fn['var'] = field
                 feature.addChild(node=feature)
 

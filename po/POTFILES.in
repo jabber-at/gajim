@@ -103,6 +103,7 @@ src/common/demandimport.py
 src/common/dh.py
 src/common/events.py
 src/common/exceptions.py
+src/common/file_props.py
 src/common/fuzzyclock.py
 src/common/gajim.py
 src/common/ged.py
@@ -113,12 +114,14 @@ src/common/i18n.py
 src/common/idle.py
 src/common/__init__.py
 src/common/jingle_content.py
+src/common/jingle_ft.py
+src/common/jingle_ftstates.py
 src/common/jingle.py
 src/common/jingle_rtp.py
 src/common/jingle_session.py
 src/common/jingle_transport.py
+src/common/jingle_xtls.py
 src/common/kwalletbinding.py
-src/common/latex.py
 src/common/location_listener.py
 src/common/logger.py
 src/common/logging_helpers.py
@@ -163,6 +166,7 @@ src/gui_menu_builder.py
 src/history_manager.py
 src/history_window.py
 src/htmltextview.py
+src/logind_listener.py
 src/message_control.py
 src/message_textview.py
 src/message_window.py
@@ -177,7 +181,6 @@ src/plugins/pluginmanager.py
 src/plugins/plugin.py
 src/plugins/plugins_i18n.py
 src/profile_window.py
-src/pycallgraph.py
 src/remote_control.py
 src/roster_window.py
 src/search_window.py

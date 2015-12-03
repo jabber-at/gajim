@@ -141,7 +141,7 @@ def init(use_color=False):
     consoleloghandler.setFormatter(
             FancyFormatter(
                     '%(asctime)s %(levelname)s %(name)s %(message)s',
-                    '%H:%M:%S',
+                    '%x %H:%M:%S',
                     use_color
             )
     )
@@ -152,14 +152,22 @@ def init(use_color=False):
     root_log.addHandler(consoleloghandler)
     root_log.propagate = False
 
+    # handle nbxmpp logs too
+    root_log = logging.getLogger('nbxmpp')
+    root_log.setLevel(logging.WARNING)
+    root_log.addHandler(consoleloghandler)
+    root_log.propagate = False
+
 def set_loglevels(loglevels_string):
     parseAndSetLogLevels(loglevels_string)
 
 def set_verbose():
     parseAndSetLogLevels('gajim=1')
+    parseAndSetLogLevels('.nbxmpp=1')
 
 def set_quiet():
     parseAndSetLogLevels('gajim=CRITICAL')
+    parseAndSetLogLevels('.nbxmpp=CRITICAL')
 
 
 # tests

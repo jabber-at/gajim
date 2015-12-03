@@ -1,15 +1,17 @@
 ##
 ## Copyright (C) 2006 Gajim Team
 ##
-## This program is free software; you can redistribute it and/or modify
+## Gajim is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published
-## by the Free Software Foundation; version 2 only.
+## by the Free Software Foundation; version 3 only.
 ##
-## This program is distributed in the hope that it will be useful,
+## Gajim is distributed in the hope that it will be useful,
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 ## GNU General Public License for more details.
 ##
+## You should have received a copy of the GNU General Public License
+## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 
 """
 Handles Jingle RTP sessions (XEP 0167)
@@ -20,8 +22,9 @@ from collections import deque
 import gobject
 import socket
 
-import xmpp
+import nbxmpp
 import farstream, gst
+import gst.interfaces
 from glib import GError
 
 import gajim
@@ -38,7 +41,7 @@ log = logging.getLogger('gajim.c.jingle_rtp')
 class JingleRTPContent(JingleContent):
     def __init__(self, session, media, transport=None):
         if transport is None:
-            transport = JingleTransportICEUDP()
+            transport = JingleTransportICEUDP(None)
         JingleContent.__init__(self, session, transport)
         self.media = media
         self._dtmf_running = False
@@ -63,6 +66,7 @@ class JingleRTPContent(JingleContent):
         # pipeline and bus
         self.pipeline = gst.Pipeline()
         bus = self.pipeline.get_bus()
+        bus.enable_sync_message_emission()
         bus.add_signal_watch()
         bus.connect('message', self._on_gst_message)
 
@@ -151,8 +155,8 @@ class JingleRTPContent(JingleContent):
         self.p2psession.stop_telephony_event()
 
     def _fill_content(self, content):
-        content.addChild(xmpp.NS_JINGLE_RTP + ' description',
-                attrs={'media': self.media}, payload=self.iter_codecs())
+        content.addChild(nbxmpp.NS_JINGLE_RTP + ' description',
+                attrs={'media': self.media}, payload=list(self.iter_codecs()))
 
     def _setup_funnel(self):
         self.funnel = gst.element_factory_make('fsfunnel')
@@ -199,7 +203,7 @@ class JingleRTPContent(JingleContent):
             elif name == 'farstream-component-state-changed':
                 state = message.structure['state']
                 if state == farstream.STREAM_STATE_FAILED:
-                    reason = xmpp.Node('reason')
+                    reason = nbxmpp.Node('reason')
                     reason.setTag('failed-transport')
                     self.session.remove_content(self.creator, self.name, reason)
             elif name == 'farstream-error':
@@ -231,7 +235,7 @@ class JingleRTPContent(JingleContent):
                 self.src_bin.get_pad('src').link(sink_pad)
                 self.stream_failed_once = True
             else:
-                reason = xmpp.Node('reason')
+                reason = nbxmpp.Node('reason')
                 reason.setTag('failed-application')
                 self.session.remove_content(self.creator, self.name, reason)
 
@@ -289,11 +293,11 @@ class JingleRTPContent(JingleContent):
             if codec.clock_rate:
                 attrs['clockrate'] = codec.clock_rate
             if codec.optional_params:
-                payload = (xmpp.Node('parameter', {'name': name, 'value': value})
-                        for name, value in codec.optional_params)
+                payload = (nbxmpp.Node('parameter', {'name': name,
+                    'value': value}) for name, value in codec.optional_params)
             else:
                 payload = ()
-            yield xmpp.Node('payload-type', attrs, payload)
+            yield nbxmpp.Node('payload-type', attrs, payload)
 
     def __stop(self, *things):
         self.pipeline.set_state(gst.STATE_NULL)
@@ -366,8 +370,11 @@ class JingleAudio(JingleRTPContent):
 
 
 class JingleVideo(JingleRTPContent):
-    def __init__(self, session, transport=None):
+    def __init__(self, session, transport=None, in_xid=0, out_xid=0):
         JingleRTPContent.__init__(self, session, 'video', transport)
+        self.in_xid = in_xid
+        self.out_xid = out_xid
+        self.out_xid_set = False
         self.setup_stream()
 
     def setup_stream(self):
@@ -375,6 +382,8 @@ class JingleVideo(JingleRTPContent):
         # sometimes, one window won't show up,
         # sometimes it'll freeze...
         JingleRTPContent.setup_stream(self, self._on_src_pad_added)
+        bus = self.pipeline.get_bus()
+        bus.connect('sync-message::element', self._on_sync_message)
 
         # the local parts
         if gajim.config.get('video_framerate'):
@@ -390,17 +399,25 @@ class JingleVideo(JingleRTPContent):
             video_size = 'video/x-raw-yuv,width=%s,height=%s ! ' % (w, h)
         else:
             video_size = ''
+        if gajim.config.get('video_see_self'):
+            tee = '! tee name=t ! queue ! videoscale ! ' + \
+                'video/x-raw-yuv,width=160,height=120 ! ffmpegcolorspace ! ' + \
+                '%s t. ! queue ' % gajim.config.get(
+                'video_output_device')
+        else:
+            tee = ''
+
         self.src_bin = self.make_bin_from_config('video_input_device',
-            '%%s ! %svideoscale ! %sffmpegcolorspace' % (framerate, video_size),
-            _("video input"))
-        #caps = gst.element_factory_make('capsfilter')
-        #caps.set_property('caps', gst.caps_from_string('video/x-raw-yuv, width=320, height=240'))
+            '%%s %s! %svideoscale ! %sffmpegcolorspace' % (tee, framerate,
+            video_size), _("video input"))
+
 
         self.pipeline.add(self.src_bin)#, caps)
+        self.pipeline.set_state(gst.STATE_PLAYING)
         #src_bin.link(caps)
 
         self.sink = self.make_bin_from_config('video_output_device',
-            'videoscale ! ffmpegcolorspace ! %s force-aspect-ratio=True',
+            'videoscale ! ffmpegcolorspace ! %s',
             _("video output"))
         self.pipeline.add(self.sink)
 
@@ -410,10 +427,26 @@ class JingleVideo(JingleRTPContent):
         # The following is needed for farstream to process ICE requests:
         self.pipeline.set_state(gst.STATE_PLAYING)
 
+    def _on_sync_message(self, bus, message):
+        if message.structure is None:
+            return False
+        if message.structure.get_name() == 'prepare-xwindow-id':
+            message.src.set_property('force-aspect-ratio', True)
+            imagesink = message.src
+            if gajim.config.get('video_see_self') and not self.out_xid_set:
+                imagesink.set_xwindow_id(self.out_xid)
+                self.out_xid_set = True
+            else:
+                imagesink.set_xwindow_id(self.in_xid)
+
     def get_fallback_src(self):
         # TODO: Use avatar?
         pipeline = 'videotestsrc is-live=true ! video/x-raw-yuv,framerate=10/1 ! ffmpegcolorspace'
         return gst.parse_bin_from_description(pipeline, True)
+
+    def destroy(self):
+        JingleRTPContent.destroy(self)
+        self.pipeline.get_bus().disconnect_by_func(self._on_sync_message)
 
 def get_content(desc):
     if desc['media'] == 'audio':
@@ -421,4 +454,4 @@ def get_content(desc):
     elif desc['media'] == 'video':
         return JingleVideo
 
-contents[xmpp.NS_JINGLE_RTP] = get_content
+contents[nbxmpp.NS_JINGLE_RTP] = get_content

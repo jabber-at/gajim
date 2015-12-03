@@ -1,15 +1,17 @@
 ##
 ## Copyright (C) 2009 Thibaut GIRKA <thib AT sitedethib.com>
 ##
-## This program is free software; you can redistribute it and/or modify
+## Gajim is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published
-## by the Free Software Foundation; version 2 only.
+## by the Free Software Foundation; version 3 only.
 ##
-## This program is distributed in the hope that it will be useful,
+## Gajim is distributed in the hope that it will be useful,
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 ## GNU General Public License for more details.
 ##
+## You should have received a copy of the GNU General Public License
+## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 
 import gst
 
@@ -95,14 +97,14 @@ class VideoInputManager(DeviceManager):
         self.detect_element('v4l2src', _('V4L2: %s'))
         # Funny things, just to test...
         # self.devices['GOOM'] = 'audiotestsrc ! goom'
-        # self.devices['screen'] = 'ximagesrc'
+        self.detect_element('ximagesrc', _('Screen'), '%s ! ffmpegcolorspace')
 
 
 class VideoOutputManager(DeviceManager):
     def detect(self):
         self.devices = {}
         # Fake video output
-        self.detect_element('fakesink', _('Fake audio output'))
+        self.detect_element('fakesink', _('Fake video output'))
         # Auto sink
         self.detect_element('xvimagesink',
             _('X Window System (X11/XShm/Xv): %s'))

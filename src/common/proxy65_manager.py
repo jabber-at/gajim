@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                    Jean-Marie Traissard <jim AT lapin.org>
-## Copyright (C) 2007-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2007-2014 Yann Leboulanger <asterix AT lagaule.org>
 ##
 ## This file is part of Gajim.
 ##
@@ -26,11 +26,12 @@ import errno
 import logging
 log = logging.getLogger('gajim.c.proxy65_manager')
 
-import common.xmpp
+import nbxmpp
 from common import gajim
 from common import helpers
 from socks5 import Socks5
-from common.xmpp.idlequeue import IdleObject
+from nbxmpp.idlequeue import IdleObject
+from common.file_props import FilesProp
 
 S_INITIAL = 0
 S_STARTED = 1
@@ -89,7 +90,7 @@ class Proxy65Manager:
                     self.proxies[proxy]._on_connect_failure()
                 self.proxies[proxy].resolve_result(host, port, jid)
                 # we can have only one streamhost
-                raise common.xmpp.NodeProcessed
+                raise nbxmpp.NodeProcessed
 
     def error_cb(self, proxy, query):
         sid = query.getAttr('sid')
@@ -137,9 +138,9 @@ class ProxyResolver:
 
     def _on_connect_success(self):
         log.debug('Host successfully connected %s:%s' % (self.host, self.port))
-        iq = common.xmpp.Protocol(name='iq', to=self.jid, typ='set')
+        iq = nbxmpp.Protocol(name='iq', to=self.jid, typ='set')
         query = iq.setTag('query')
-        query.setNamespace(common.xmpp.NS_BYTESTREAM)
+        query.setNamespace(nbxmpp.NS_BYTESTREAM)
         query.setAttr('sid',  self.sid)
 
         activate = query.setTag('activate')
@@ -165,6 +166,7 @@ class ProxyResolver:
         self.state = S_FINISHED
 
     def _on_connect_failure(self):
+        log.debug('Connection failed with %s:%s' % (self.host, self.port))
         self.state = S_FINISHED
         self.host = None
         self.port = 0
@@ -173,9 +175,11 @@ class ProxyResolver:
     def disconnect(self, connection):
         if self.host_tester:
             self.host_tester.disconnect()
+            FilesProp.deleteFileProp(self.host_tester.file_props)
             self.host_tester = None
         if self.receiver_tester:
             self.receiver_tester.disconnect()
+            FilesProp.deleteFileProp(self.receiver_tester.file_props)
             self.receiver_tester = None
         try:
             self.connections.remove(connection)
@@ -209,9 +213,9 @@ class ProxyResolver:
         """
         self.state = S_STARTED
         self.active_connection = connection
-        iq = common.xmpp.Protocol(name='iq', to=self.proxy, typ='get')
+        iq = nbxmpp.Protocol(name='iq', to=self.proxy, typ='get')
         query = iq.setTag('query')
-        query.setNamespace(common.xmpp.NS_BYTESTREAM)
+        query.setNamespace(nbxmpp.NS_BYTESTREAM)
         connection.send(iq)
 
     def __init__(self, proxy, sender_jid, testit):
@@ -248,9 +252,10 @@ class HostTester(Socks5, IdleObject):
         self.on_success = on_success
         self.on_failure = on_failure
         self._sock = None
-        self.file_props = {'is_a_proxy': True,
-                'proxy_sender': sender_jid,
-                'proxy_receiver': 'test@gajim.org/test2'}
+        self.file_props = FilesProp.getNewFileProp(jid, sid)
+        self.file_props.is_a_proxy = True
+        self.file_props.proxy_sender = sender_jid
+        self.file_props.proxy_receiver = 'test@gajim.org/test2'
         Socks5.__init__(self, gajim.idlequeue, host, port, None, None, None)
         self.sid = sid
 
@@ -367,9 +372,10 @@ class ReceiverTester(Socks5, IdleObject):
         self.on_success = on_success
         self.on_failure = on_failure
         self._sock = None
-        self.file_props = {'is_a_proxy': True,
-                'proxy_sender': sender_jid,
-                'proxy_receiver': 'test@gajim.org/test2'}
+        self.file_props = FilesProp.getNewFileProp(jid, sid)
+        self.file_props.is_a_proxy = True
+        self.file_props.proxy_sender = sender_jid
+        self.file_props.proxy_receiver = 'test@gajim.org/test2'
         Socks5.__init__(self, gajim.idlequeue, host, port, None, None, None)
         self.sid = sid
 

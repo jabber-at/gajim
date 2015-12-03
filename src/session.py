@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/session.py
 ##
-## Copyright (C) 2008-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2008-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2008 Brendan Taylor <whateley AT gmail.com>
 ##                    Jonathan Schleifer <js-gajim AT webkeks.org>
 ##                    Stephan Erb <steve-e AT h3c.de>
@@ -30,8 +30,6 @@ from common import contacts
 from common import ged
 from common.connection_handlers_events import ChatstateReceivedEvent, \
     InformationEvent
-
-import common.xmpp
 
 import message_control
 
@@ -101,7 +99,7 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
                 sectext = _('The database file (%s) cannot be read. Try to '
                     'repair it (see http://trac.gajim.org/wiki/DatabaseBackup) '
                     'or remove it (all history will be lost).') % \
-                    common.logger.LOG_DB_PATH
+                    gajim.logger.LOG_DB_PATH
                 gajim.nec.push_incoming_event(InformationEvent(None,
                     conn=self.conn, level='error', pri_txt=pritext,
                     sec_txt=sectext))
@@ -119,8 +117,6 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
         contact = gajim.contacts.get_contact(self.conn.name, obj.jid,
             obj.resource)
         if contact and (not obj.forwarded or not obj.sent):
-            if contact.composing_xep != 'XEP-0085': # We cache xep85 support
-                contact.composing_xep = obj.composing_xep
             if self.control and self.control.type_id == \
             message_control.TYPE_CHAT:
                 if obj.chatstate is not None:
@@ -164,6 +160,7 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             if ctrl:
                 self.control = ctrl
                 self.control.set_session(self)
+                self.control.contact = contact
 
         if not pm:
             self.roster_message2(obj)
@@ -172,8 +169,7 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             gajim.interface.remote_ctrl.raise_signal('NewMessage', (
                 self.conn.name, [obj.fjid, obj.msgtxt, obj.timestamp,
                 obj.encrypted, obj.mtype, obj.subject, obj.chatstate,
-                obj.msg_id, obj.composing_xep, obj.user_nick, obj.xhtml,
-                obj.form_node]))
+                obj.msg_id, obj.user_nick, obj.xhtml, obj.form_node]))
 
     def roster_message2(self, obj):
         """
@@ -242,7 +238,8 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             obj.show_in_systray = notify.get_show_in_systray(event_type,
                 self.conn.name, contact)
 
-        if not self.control:
+        if (not self.control and obj.mtype != 'normal') or \
+        (obj.mtype == 'normal' and not obj.popup):
             event = gajim.events.create_event(type_, (obj.msgtxt, obj.subject,
                 obj.mtype, obj.timestamp, obj.encrypted, obj.resource,
                 obj.msg_id, obj.xhtml, self, obj.form_node, obj.displaymarking,
@@ -418,7 +415,8 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
                             'acceptable?''') % (
                             negotiation.describe_features(ask_user)),
                             on_response_yes=accept_nondefault_options,
-                            on_response_no=reject_nondefault_options)
+                            on_response_no=reject_nondefault_options,
+                            transient_for=self.control.parent_win.window)
                     else:
                         self.respond_e2e_bob(form, negotiated, not_acceptable)
 
@@ -477,7 +475,8 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
                             negotiation.describe_features(ask_user)),
                             _('Always accept for this contact'),
                             on_response_yes = accept_nondefault_options,
-                            on_response_no = reject_nondefault_options)
+                            on_response_no = reject_nondefault_options,
+                            transient_for=self.control.parent_win.window)
                 else:
                     try:
                         self.accept_e2e_alice(form, negotiated)

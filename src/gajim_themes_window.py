@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/gajim_themes_window.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Jean-Marie Traissard <jim AT lapin.org>
@@ -34,7 +34,8 @@ class GajimThemesWindow:
     def __init__(self):
         self.xml = gtkgui_helpers.get_gtk_builder('gajim_themes_window.ui')
         self.window = self.xml.get_object('gajim_themes_window')
-        self.window.set_transient_for(gajim.interface.roster.window)
+        self.window.set_transient_for(gajim.interface.instances[
+            'preferences'].window)
 
         self.options = ['account', 'group', 'contact', 'banner']
         self.options_combobox = self.xml.get_object('options_combobox')
@@ -183,8 +184,8 @@ class GajimThemesWindow:
             return
         if self.current_theme == gajim.config.get('roster_theme'):
             dialogs.ErrorDialog(
-                    _('You cannot delete your current theme'),
-            _('Please first choose another for your current theme.'))
+                _('You cannot delete your current theme'),
+                _('Please first choose another theme as your current theme.'))
             return
         self.theme_options_vbox.set_sensitive(False)
         self.theme_options_table.set_sensitive(False)

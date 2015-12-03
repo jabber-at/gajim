@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/helpers.py
 ##
-## Copyright (C) 2003-2012 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Alex Mauer <hawke AT hawkesnest.net>
@@ -142,7 +142,7 @@ def parse_resource(resource):
     """
     if resource:
         try:
-            from xmpp.stringprepare import resourceprep
+            from nbxmpp.stringprepare import resourceprep
             return resourceprep.prepare(unicode(resource))
         except UnicodeError:
             raise InvalidFormat, 'Invalid character in resource.'
@@ -157,7 +157,7 @@ def prep(user, server, resource):
         if len(user) < 1 or len(user) > 1023:
             raise InvalidFormat, _('Username must be between 1 and 1023 chars')
         try:
-            from xmpp.stringprepare import nodeprep
+            from nbxmpp.stringprepare import nodeprep
             user = nodeprep.prepare(unicode(user))
         except UnicodeError:
             raise InvalidFormat, _('Invalid character in username.')
@@ -168,7 +168,7 @@ def prep(user, server, resource):
         if len(server) < 1 or len(server) > 1023:
             raise InvalidFormat, _('Server must be between 1 and 1023 chars')
         try:
-            from xmpp.stringprepare import nameprep
+            from nbxmpp.stringprepare import nameprep
             server = nameprep.prepare(unicode(server))
         except UnicodeError:
             raise InvalidFormat, _('Invalid character in hostname.')
@@ -179,7 +179,7 @@ def prep(user, server, resource):
         if len(resource) < 1 or len(resource) > 1023:
             raise InvalidFormat, _('Resource must be between 1 and 1023 chars')
         try:
-            from xmpp.stringprepare import resourceprep
+            from nbxmpp.stringprepare import resourceprep
             resource = resourceprep.prepare(unicode(resource))
         except UnicodeError:
             raise InvalidFormat, _('Invalid character in resource.')
@@ -685,7 +685,7 @@ def get_contact_dict_for_account(account):
             del contacts_dict[name]
             contacts_dict['%s (%s)' % (name, contact1.jid)] = contact1
             contacts_dict['%s (%s)' % (name, jid)] = contact
-        else:
+        elif contact.name:
             if contact.name == gajim.get_nick_from_jid(jid):
                 del contacts_dict[jid]
             contacts_dict[name] = contact
@@ -747,49 +747,49 @@ def play_sound(event):
     path_to_soundfile = gajim.config.get_per('soundevents', event, 'path')
     play_sound_file(path_to_soundfile)
 
-def check_soundfile_path(file, dirs=(gajim.gajimpaths.data_root,
+def check_soundfile_path(file_, dirs=(gajim.gajimpaths.data_root,
 gajim.DATA_DIR)):
     """
     Check if the sound file exists
 
-    :param file: the file to check, absolute or relative to 'dirs' path
+    :param file_: the file to check, absolute or relative to 'dirs' path
     :param dirs: list of knows paths to fallback if the file doesn't exists
                                      (eg: ~/.gajim/sounds/, DATADIR/sounds...).
     :return      the path to file or None if it doesn't exists.
     """
-    if not file:
+    if not file_:
         return None
-    elif os.path.exists(file):
-        return file
+    elif os.path.exists(file_):
+        return file_
 
     for d in dirs:
-        d = os.path.join(d, 'sounds', file)
+        d = os.path.join(d, 'sounds', file_)
         if os.path.exists(d):
             return d
     return None
 
-def strip_soundfile_path(file, dirs=(gajim.gajimpaths.data_root,
+def strip_soundfile_path(file_, dirs=(gajim.gajimpaths.data_root,
 gajim.DATA_DIR), abs=True):
     """
     Remove knowns paths from a sound file
 
     Filechooser returns absolute path. If path is a known fallback path, we remove it.
     So config have no hardcoded path        to DATA_DIR and text in textfield is shorther.
-    param: file: the filename to strip.
+    param: file_: the filename to strip.
     param: dirs: list of knowns paths from which the filename should be stripped.
     param:  abs: force absolute path on dirs
     """
-    if not file:
+    if not file_:
         return None
 
-    name = os.path.basename(file)
+    name = os.path.basename(file_)
     for d in dirs:
         d = os.path.join(d, 'sounds', name)
         if abs:
             d = os.path.abspath(d)
-        if file == d:
+        if file_ == d:
             return name
-    return file
+    return file_
 
 def play_sound_file(path_to_soundfile):
     if path_to_soundfile == 'beep':
@@ -1300,7 +1300,7 @@ def prepare_and_validate_gpg_keyID(account, jid, keyID):
     return keyID
 
 def update_optional_features(account = None):
-    import xmpp
+    import nbxmpp
     if account:
         accounts = [account]
     else:
@@ -1308,34 +1308,41 @@ def update_optional_features(account = None):
     for a in accounts:
         gajim.gajim_optional_features[a] = []
         if gajim.config.get_per('accounts', a, 'subscribe_mood'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_MOOD + '+notify')
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_MOOD + '+notify')
         if gajim.config.get_per('accounts', a, 'subscribe_activity'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_ACTIVITY + '+notify')
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_ACTIVITY + \
+                '+notify')
         if gajim.config.get_per('accounts', a, 'publish_tune'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_TUNE)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_TUNE)
         if gajim.config.get_per('accounts', a, 'publish_location'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_LOCATION)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_LOCATION)
         if gajim.config.get_per('accounts', a, 'subscribe_tune'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_TUNE + '+notify')
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_TUNE + '+notify')
         if gajim.config.get_per('accounts', a, 'subscribe_nick'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_NICK + '+notify')
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_NICK + '+notify')
         if gajim.config.get_per('accounts', a, 'subscribe_location'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_LOCATION + '+notify')
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_LOCATION + \
+                '+notify')
         if gajim.config.get('outgoing_chat_state_notifactions') != 'disabled':
-            gajim.gajim_optional_features[a].append(xmpp.NS_CHATSTATES)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_CHATSTATES)
         if not gajim.config.get('ignore_incoming_xhtml'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_XHTML_IM)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_XHTML_IM)
         if gajim.HAVE_PYCRYPTO \
         and gajim.config.get_per('accounts', a, 'enable_esessions'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_ESESSION)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_ESESSION)
         if gajim.config.get_per('accounts', a, 'answer_receipts'):
-            gajim.gajim_optional_features[a].append(xmpp.NS_RECEIPTS)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_RECEIPTS)
+        gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE)
         if gajim.HAVE_FARSTREAM:
-            gajim.gajim_optional_features[a].append(xmpp.NS_JINGLE)
-            gajim.gajim_optional_features[a].append(xmpp.NS_JINGLE_RTP)
-            gajim.gajim_optional_features[a].append(xmpp.NS_JINGLE_RTP_AUDIO)
-            gajim.gajim_optional_features[a].append(xmpp.NS_JINGLE_RTP_VIDEO)
-            gajim.gajim_optional_features[a].append(xmpp.NS_JINGLE_ICE_UDP)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_RTP)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_RTP_AUDIO)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_RTP_VIDEO)
+            gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_ICE_UDP)
+        gajim.gajim_optional_features[a].append(
+            nbxmpp.NS_JINGLE_FILE_TRANSFER)
+        gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_XTLS)
+        gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_BYTESTREAM)
+        gajim.gajim_optional_features[a].append(nbxmpp.NS_JINGLE_IBB)
         gajim.caps_hash[a] = caps_cache.compute_caps_hash([gajim.gajim_identity],
                 gajim.gajim_common_features + gajim.gajim_optional_features[a])
         # re-send presence with new hash
@@ -1377,7 +1384,7 @@ def get_subscription_request_msg(account=None):
         return s
 
 def replace_dataform_media(form, stanza):
-    import xmpp
+    import nbxmpp
     found = False
     for field in form.getTags('field'):
         for media in field.getTags('media'):
@@ -1385,7 +1392,7 @@ def replace_dataform_media(form, stanza):
                 uri_data = uri.getData()
                 if uri_data.startswith('cid:'):
                     uri_data = uri_data[4:]
-                    for data in stanza.getTags('data', namespace=xmpp.NS_BOB):
+                    for data in stanza.getTags('data', namespace=nbxmpp.NS_BOB):
                         if data.getAttr('cid') == uri_data:
                             uri.setData(data.getData())
                             found = True
@@ -1435,7 +1442,7 @@ def get_proxy_info(account):
         if not proxyptr:
             return proxy
         for key in proxyptr.keys():
-            proxy[key] = proxyptr[key][1]
+            proxy[key] = proxyptr[key]
         return proxy
 
 def _get_img_direct(attrs):
