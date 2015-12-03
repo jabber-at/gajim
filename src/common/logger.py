@@ -223,13 +223,17 @@ class Logger:
             return False
 
     def jid_is_room_jid(self, jid):
-        self.cur.execute('SELECT jid_id FROM jids WHERE jid=?  AND type=?',
-                (jid, constants.JID_ROOM_TYPE))
+        """
+        Return True if it's a room jid, False if it's not, None if we don't know
+        """
+        self.cur.execute('SELECT type FROM jids WHERE jid=?', (jid,))
         row = self.cur.fetchone()
         if row is None:
-            return False
+            return None
         else:
-            return True
+            if row[0] == constants.JID_ROOM_TYPE:
+                return True
+            return False
 
     def get_jid_id(self, jid, typestr=None):
         """
@@ -411,10 +415,10 @@ class Logger:
                 message, subject) VALUES (?, ?, ?, ?, ?, ?, ?)'''
         try:
             self.cur.execute(sql, values)
-        except sqlite.DatabaseError:
-            raise exceptions.DatabaseMalformed
         except sqlite.OperationalError, e:
             raise exceptions.PysqliteOperationalError(str(e))
+        except sqlite.DatabaseError:
+            raise exceptions.DatabaseMalformed
         message_id = None
         if write_unread:
             try:
@@ -1099,21 +1103,22 @@ class Logger:
             time_col = int(float(time.mktime(tim)))
         else:
             time_col = int(float(time.time()))
-        if msg:
-            if self.jid_is_from_pm(with_) or nick:
-                # It's a groupchat message
-                if nick:
-                    # It's a message from a groupchat occupent
-                    type_ = 'gc_msg'
-                    with_ = with_ + '/' + nick
-                else:
-                    # It's a server message message, we don't log them
-                    return
+        if not msg:
+            return
+        if self.jid_is_from_pm(with_) or nick:
+            # It's a groupchat message
+            if nick:
+                # It's a message from a groupchat occupent
+                type_ = 'gc_msg'
+                with_ = with_ + '/' + nick
             else:
-                if direction == 'from':
-                    type_ = 'chat_msg_recv'
-                elif direction == 'to':
-                    type_ = 'chat_msg_sent'
+                # It's a server message message, we don't log them
+                return
+        else:
+            if direction == 'from':
+                type_ = 'chat_msg_recv'
+            elif direction == 'to':
+                type_ = 'chat_msg_sent'
         jid_id = self.get_jid_id(with_)
         where_sql = 'jid_id = %s AND message=?' % jid_id
         if type_ == 'gc_msg':

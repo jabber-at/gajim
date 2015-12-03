@@ -366,6 +366,10 @@ class MessageWindow(object):
                 # theme
                 if not gtk.settings_get_default().get_property(
                 'gtk-key-theme-name') == 'Emacs':
+                    if gajim.interface.msg_win_mgr.mode == \
+                    gajim.interface.msg_win_mgr.ONE_MSG_WINDOW_ALWAYS_WITH_ROSTER:
+                        gajim.interface.roster.tree.grab_focus()
+                        return False
                     control._on_send_file_menuitem_activate(None)
                     return True
             elif control.type_id == message_control.TYPE_CHAT and \
@@ -384,8 +388,12 @@ class MessageWindow(object):
                 return True
             elif control.type_id == message_control.TYPE_GC and \
             keyval == gtk.keysyms.b: # CTRL + b
-                control._on_bookmark_room_menuitem_activate(None)
-                return True
+                # CTRL + b moves cursor one char backward when user uses Emacs
+                # theme
+                if not gtk.settings_get_default().get_property(
+                'gtk-key-theme-name') == 'Emacs':
+                    control._on_bookmark_room_menuitem_activate(None)
+                    return True
             # Tab switch bindings
             elif keyval == gtk.keysyms.F4: # CTRL + F4
                 self.remove_tab(control, self.CLOSE_CTRL_KEY)
@@ -511,7 +519,8 @@ class MessageWindow(object):
 
         if control.type_id == message_control.TYPE_GC:
             name = control.room_jid.split('@')[0]
-            urgent = control.attention_flag
+            urgent = control.attention_flag or \
+                gajim.config.get('notify_on_all_muc_messages')
         else:
             name = control.contact.get_shown_name()
             if control.resource:

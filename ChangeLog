@@ -1,3 +1,28 @@
+Gajim 0.16.4 (26 September 2015)
+
+  * Fix trusting GPG keys
+  * Ability to disable synchronization of logs with server
+  * Improve MAM usage
+
+Gajim 0.16.3 (31 July 2015)
+
+  * Fix reading secret file
+  * Fix reconnection after suspend
+  * Fix sending GPG-encrypted file to non-trusted key
+
+Gajim 0.16.2 (24 July 2015)
+
+  * improve Zeroconf under windows and with IPv6
+  * Fix errors with GnuPG
+  * Minor fixes and improvements
+
+Gajim 0.16.1 (28 February 2015)
+
+  * Fix sending Zeroconf messages
+  * Make ipython compatible to version >= 1.0
+  * Support XEP-0313 MAM
+  * Minor fixes and improvements
+
 Gajim 0.16 (04 October 2014)
 
   * Improve File transfer support by adding Jingle file transfer

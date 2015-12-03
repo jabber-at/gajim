@@ -201,7 +201,7 @@ class Interface:
         path = gtkgui_helpers.get_icon_path('gajim-connection_lost', 48)
         account = obj.conn.name
         notify.popup(_('Connection Failed'), account, account,
-            'connection_failed', path, obj.title, obj.msg)
+            '', path, obj.title, obj.msg)
 
     def unblock_signed_in_notifications(self, account):
         gajim.block_signed_in_notifications[account] = False
@@ -415,6 +415,7 @@ class Interface:
                         account=account, name=nick, show=show)
                     ctrl = self.new_private_chat(gc_c, account, session)
 
+                ctrl.contact.our_chatstate = False
                 ctrl.print_conversation(_('Error %(code)s: %(msg)s') % {
                     'code': obj.error_code, 'msg': obj.error_msg}, 'status')
                 return
@@ -586,6 +587,10 @@ class Interface:
                     elif f.var == 'public_list':
                         f.value = False
                 obj.conn.send_gc_config(obj.jid, obj.dataform.get_purged())
+                user_list = {}
+                for jid in gajim.automatic_rooms[account][obj.jid]['invities']:
+                    user_list[jid] = {'affiliation': 'member'}
+                obj.conn.send_gc_affiliation_list(obj.jid, user_list)
             else:
                 # use default configuration
                 obj.conn.send_gc_config(obj.jid, obj.form_node)
@@ -664,7 +669,7 @@ class Interface:
         else:
             path = gtkgui_helpers.get_icon_path('gtk-dialog-warning', 48)
             account = obj.conn.name
-            notify.popup('warning', account, account, 'warning', path,
+            notify.popup('warning', account, account, '', path,
                 _('OpenPGP Passphrase Incorrect'),
                 _('You are currently connected without your OpenPGP key.'))
         self.forget_gpg_passphrase(obj.keyID)
@@ -1133,12 +1138,20 @@ class Interface:
             # Else disable autoaway
             gajim.sleeper_state[account] = 'off'
 
-        if obj.conn.archiving_supported:
+        if obj.conn.archiving_136_supported and gajim.config.get_per('accounts',
+        account, 'sync_logs_with_server'):
             # Start merging logs from server
             obj.conn.request_modifications_page(gajim.config.get_per('accounts',
                 account, 'last_archiving_time'))
             gajim.config.set_per('accounts', account, 'last_archiving_time',
                 time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+        if obj.conn.archiving_313_supported and gajim.config.get_per('accounts',
+        account, 'sync_logs_with_server'):
+            mam_id = gajim.config.get_per('accounts', account, 'last_mam_id')
+            if mam_id:
+                obj.conn.request_archive(after=mam_id)
+            else:
+                obj.conn.request_archive(start='2013-02-24T03:51:42Z')
 
         invisible_show = gajim.SHOW_LIST.index('invisible')
         # We cannot join rooms if we are invisible
@@ -1201,6 +1214,8 @@ class Interface:
         file_props = None
         # get the file_props of our session
         file_props = FilesProp.getFileProp(obj.conn.name, obj.sid)
+        if not file_props:
+            return
         ft.set_status(file_props, 'stop')
         file_props.error = -4 # is it the right error code?
         ft.show_stopped(obj.jid, file_props, 'Peer cancelled ' +
@@ -1356,6 +1371,13 @@ class Interface:
             on_response_cancel=on_cancel)
         self.instances[account]['online_dialog']['ssl_error'].set_title(
             _('SSL Certificate Verification for %s') % account)
+
+    def handle_event_non_anonymous_server(self, obj):
+        account = obj.conn.name
+        server = gajim.config.get_per('accounts', account, 'hostname')
+        dialogs.ErrorDialog(_('Non Anonymous Server'), sectext='Server "%s"'
+            'does not support anonymous connection' % server,
+            transient_for=self.roster.window)
 
     def handle_event_fingerprint_error(self, obj):
         # ('FINGERPRINT_ERROR', account, (new_fingerprint,))
@@ -1553,6 +1575,7 @@ class Interface:
                 [self.handle_event_roster_item_exchange],
             'signed-in': [self.handle_event_signed_in],
             'ssl-error': [self.handle_event_ssl_error],
+            'non-anonymous-server-error': [self.handle_event_non_anonymous_server],
             'stream-conflict-received': [self.handle_event_resource_conflict],
             'subscribe-presence-received': [
                 self.handle_event_subscribe_presence],
@@ -2781,10 +2804,6 @@ class Interface:
         if gajim.config.get('verbose'):
             logging_helpers.set_verbose()
 
-        # Is Gajim default app?
-        if os.name != 'nt' and gajim.config.get('check_if_gajim_is_default'):
-            gtkgui_helpers.possibly_set_gajim_as_xmpp_handler()
-
         for account in gajim.config.get_per('accounts'):
             if gajim.config.get_per('accounts', account, 'is_zeroconf'):
                 gajim.ZEROCONF_ACC_NAME = account
@@ -2927,7 +2946,8 @@ class Interface:
             def gnome_screensaver_ActiveChanged_cb(active):
                 if not active:
                     for account in gajim.connections:
-                        if gajim.sleeper_state[account] == 'autoaway-forced':
+                        if gajim.account_is_connected(account) and \
+                        gajim.sleeper_state[account] == 'autoaway-forced':
                             # We came back online ofter gnome-screensaver
                             # autoaway
                             self.roster.send_status(account, 'online',
@@ -2943,6 +2963,8 @@ class Interface:
                                     not gajim.sleeper_state[account]:
                         continue
                     if gajim.sleeper_state[account] == 'online':
+                        if not gajim.account_is_connected(account):
+                            continue
                         # we save out online status
                         gajim.status_before_autoaway[account] = \
                                 gajim.connections[account].status

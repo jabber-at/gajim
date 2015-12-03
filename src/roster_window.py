@@ -299,7 +299,7 @@ class RosterWindow:
         delimiter = gajim.connections[account].nested_group_delimiter
         group_splited = group.split(delimiter)
         parent_group = delimiter.join(group_splited[:-1])
-        if parent_group in self._iters[account_group]['groups']:
+        if len(group_splited) > 1 and parent_group in self._iters[account_group]['groups']:
             iter_parent = self._iters[account_group]['groups'][parent_group]
         elif parent_group:
             iter_parent = self._add_group_iter(account, parent_group)
@@ -555,7 +555,7 @@ class RosterWindow:
         if not family_in_roster:
             return False
 
-        assert old_big_jid, 'No Big Brother in nearby family % (Family: %)' % \
+        assert old_big_jid, 'No Big Brother in nearby family %s (Family: %s)' %\
             (nearby_family, family)
         iters = self._get_contact_iter(old_big_jid, old_big_account,
             old_big_contact, self.model)
@@ -976,6 +976,9 @@ class RosterWindow:
 
     # FIXME: maybe move to gajim.py
     def remove_newly_added(self, jid, account):
+        if account not in gajim.newly_added:
+            # Account has been deleted during the timeout that called us
+            return
         if jid in gajim.newly_added[account]:
             gajim.newly_added[account].remove(jid)
             self.draw_contact(jid, account)
@@ -2630,6 +2633,20 @@ class RosterWindow:
             self.add_account_contacts(obj.conn.name, improve_speed=False)
             self.fire_up_unread_messages_events(obj.conn.name)
         else:
+            # add self contact
+            if gajim.config.get('show_self_contact') == 'always':
+                account = obj.conn.name
+                self_jid = gajim.get_jid_from_account(account)
+                if self_jid not in gajim.contacts.get_jid_list(account):
+                    resource = ''
+                    if gajim.connections[account].server_resource:
+                        resource = gajim.connections[account].server_resource
+                    contact = gajim.contacts.create_contact(jid=self_jid,
+                        account=account, name=gajim.nicks[account],
+                        groups=['self_contact'], show='offline', sub='both',
+                        ask='none', resource=resource)
+                    gajim.contacts.add_contact(account, contact)
+                    self.add_contact(self_jid, account)
             if gajim.config.get('remember_opened_chat_controls'):
                 account = obj.conn.name
                 controls = gajim.config.get_per('accounts', account,
@@ -4966,15 +4983,7 @@ class RosterWindow:
         if not change_title_allowed:
             return
 
-        if gajim.config.get('one_message_window') == 'always_with_roster':
-            # always_with_roster mode defers to the MessageWindow
-            if not gajim.interface.msg_win_mgr.one_window_opened():
-                # No MessageWindow to defer to
-                self.window.set_title('Gajim')
-            return
-
         nb_unread = 0
-        start = ''
         for account in gajim.connections:
             # Count events in roster title only if we don't auto open them
             if not helpers.allow_popup_window(account):
@@ -4982,6 +4991,17 @@ class RosterWindow:
                     'file-request', 'file-error', 'file-completed',
                     'file-request-error', 'file-send-error', 'file-stopped',
                     'printed_chat'], account)
+
+
+        if gajim.config.get('one_message_window') == 'always_with_roster':
+            # always_with_roster mode defers to the MessageWindow
+            if not gajim.interface.msg_win_mgr.one_window_opened():
+                # No MessageWindow to defer to
+                self.window.set_title('Gajim')
+            gtkgui_helpers.set_unset_urgency_hint(self.window, nb_unread)
+            return
+
+        start = ''
         if nb_unread > 1:
             start = '[' + str(nb_unread) + ']  '
         elif nb_unread == 1:

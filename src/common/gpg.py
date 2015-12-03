@@ -31,6 +31,7 @@ if HAVE_GPG:
     class GnuPG(gnupg.GPG):
         def __init__(self, use_agent=False):
             gnupg.GPG.__init__(self)
+            self.encoding = 'utf-8'
             self.decode_errors = 'replace'
             self.passphrase = None
             self.use_agent = use_agent
@@ -53,11 +54,14 @@ if HAVE_GPG:
                 for key in recipients:
                     if key not in self.always_trust:
                         trust = False
+            if not trust:
+                # check that we'll be able to encrypt
+                result = super(GnuPG, self).list_keys(keys=recipients)
+                for key in result:
+                    if key['trust'] not in ('f', 'u'):
+                        return '', 'NOT_TRUSTED'
             result = super(GnuPG, self).encrypt(str_, recipients,
                 always_trust=trust, passphrase=self.passphrase)
-
-            if result.status == 'invalid recipient':
-                return '', 'NOT_TRUSTED'
 
             if result.ok:
                 error = ''

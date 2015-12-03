@@ -229,7 +229,7 @@ class TimeResultReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
             # Remove the trailing "+00:00"
             utc_time = utc_time[:-6]
         else:
-            log.info("Wrong timezone defintion: %s" % str(e))
+            log.info("Wrong timezone defintion: %s" % utc_time)
             return
         try:
             t = datetime.datetime.strptime(utc_time, '%Y-%m-%dT%H:%M:%S')
@@ -1011,6 +1011,77 @@ class BeforeChangeShowEvent(nec.NetworkIncomingEvent):
     name = 'before-change-show'
     base_network_events = []
 
+class MamMessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
+    name = 'mam-message-received'
+    base_network_events = []
+
+    def generate(self):
+        if not self.stanza:
+            return
+        account = self.conn.name
+        delay = self.stanza.getTag('delay', namespace=nbxmpp.NS_DELAY2)
+        if not delay:
+            return
+        tim = delay.getAttr('stamp')
+        tim = helpers.datetime_tuple(tim)
+        self.tim = localtime(timegm(tim))
+        self.msg_ = self.stanza.getTag('message')
+        to_ = self.msg_.getAttr('to')
+        if to_:
+            to_ = gajim.get_jid_without_resource(to_)
+        else:
+            to_ = gajim.get_jid_from_account(account)
+        frm_ = gajim.get_jid_without_resource(self.msg_.getAttr('from'))
+        self.msgtxt = self.msg_.getTagData('body')
+        if to_ == gajim.get_jid_from_account(account):
+            self.with_ = frm_
+            self.direction = 'from'
+            self.resource = gajim.get_resource_from_jid(
+                self.msg_.getAttr('from'))
+        else:
+            self.with_ = to_
+            self.direction = 'to'
+            self.resource = gajim.get_resource_from_jid(self.msg_.getAttr('to'))
+        self.enc_tag = self.msg_.getTag('x', namespace=nbxmpp.NS_ENCRYPTED)
+        return True
+
+class MamDecryptedMessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
+    name = 'mam-decrypted-message-received'
+    base_network_events = []
+
+    def generate(self):
+        self.nick = None
+        msg_ = self.msg_obj.msg_
+        self.with_ = self.msg_obj.with_
+        self.direction = self.msg_obj.direction
+        self.tim = self.msg_obj.tim
+        res = self.msg_obj.resource
+        self.msgtxt = self.msg_obj.msgtxt
+        is_pm = gajim.logger.jid_is_room_jid(self.with_)
+        if msg_.getAttr('type') == 'groupchat':
+            if is_pm == False:
+                log.warn('JID %s is marked as normal contact in database '
+                         'but we got a groupchat message from it.')
+                return
+            if is_pm == None:
+                gajim.logger.get_jid_id(self.with_, 'ROOM')
+            self.nick = res
+        else:
+            if is_pm == None:
+                # we don't know this JID, we need to disco it.
+                server = gajim.get_server_from_jid(self.with_)
+                if server not in self.conn.mam_awaiting_disco_result:
+                    self.conn.mam_awaiting_disco_result[server] = [
+                        [self.with_, self.direction, self.tim, self.msgtxt,
+                        res]]
+                    self.conn.discoverInfo(server)
+                else:
+                    self.conn.mam_awaiting_disco_result[server].append(
+                        [self.with_, self.direction, self.tim, self.msgtxt,
+                        res])
+                return
+        return True
+
 class MessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
     name = 'message-received'
     base_network_events = ['raw-message-received']
@@ -1088,6 +1159,13 @@ class MessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
                         'has been ignored.')))
                     return
                 self.forwarded = True
+
+        result = self.stanza.getTag('result', namespace=nbxmpp.NS_MAM)
+        if result:
+            forwarded = result.getTag('forwarded', namespace=nbxmpp.NS_FORWARD)
+            gajim.nec.push_incoming_event(MamMessageReceivedEvent(None,
+                conn=self.conn, stanza=forwarded))
+            return
 
         self.enc_tag = self.stanza.getTag('x', namespace=nbxmpp.NS_ENCRYPTED)
 
@@ -1868,6 +1946,10 @@ class PrivacyListActiveDefaultEvent(nec.NetworkIncomingEvent):
     name = 'privacy-list-active-default'
     base_network_events = []
 
+class NonAnonymousServerErrorEvent(nec.NetworkIncomingEvent):
+    name = 'non-anonymous-server-error'
+    base_network_events = []
+
 class VcardReceivedEvent(nec.NetworkIncomingEvent):
     name = 'vcard-received'
     base_network_events = []
@@ -2319,6 +2401,7 @@ class NotificationEvent(nec.NetworkIncomingEvent):
         if not msg_obj.msg_obj.gc_control:
             # we got a message from a room we're not in? ignore it
             return
+        self.jid = msg_obj.jid
         sound = msg_obj.msg_obj.gc_control.highlighting_for_message(
             msg_obj.msgtxt, msg_obj.timestamp)[1]
 
@@ -2509,6 +2592,12 @@ class MessageOutgoingEvent(nec.NetworkOutgoingEvent):
     def generate(self):
         return True
 
+class StanzaMessageOutgoingEvent(nec.NetworkOutgoingEvent):
+    name='stanza-message-outgoing'
+    base_network_events = []
+
+    def generate(self):
+        return True
 
 class GcMessageOutgoingEvent(nec.NetworkOutgoingEvent):
     name = 'gc-message-outgoing'
