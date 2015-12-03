@@ -1,3 +1,11 @@
+gajim (0.16-0.1) unstable; urgency=low
+
+  * New upstream release.
+  * Merge changes from the package in Debian unstable.
+  * Move to a 0.x Debian revision.
+
+ -- Mathias Ertl <mati@fsinf.at>  Thu, 03 Dec 2015 12:48:20 +0100
+
 gajim (0.15.4-1) unstable; urgency=low
 
   * New upstream release.
