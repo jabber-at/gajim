@@ -4,6 +4,7 @@ gajim (0.16-0.1) unstable; urgency=low
   * Merge changes from the package in Debian unstable.
   * Move to a 0.x Debian revision.
   * Use @jabber.at address as maintainer address, so this is a NMU.
+  * Remove debian .menu file.
 
  -- Mathias Ertl <mati@jabber.at>  Thu, 03 Dec 2015 12:48:20 +0100
 
