@@ -1,6 +1,7 @@
 gajim (0.16.4-0.1) unstable; urgency=low
 
   * New upstream release.
+  * Remove fix-manpages.patch (applied upstream).
 
  -- Mathias Ertl <mati@jabber.at>  Thu, 03 Dec 2015 14:59:35 +0100
 
