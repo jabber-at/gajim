@@ -1,0 +1,51 @@
+Description: Fix markup erros in manpages
+ Manpages have lists that start with .Bl (begin list) but that have no
+ matching .El (end list). This patch adds them.
+Author: Tanguy Ortolo <tanguy+debian@ortolo.eu>
+Forwarded: https://trac.gajim.org/ticket/7851
+Last-Update: 2014-10-14
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: gajim/data/gajim-history-manager.1
+===================================================================
+--- gajim.orig/data/gajim-history-manager.1	2014-10-14 22:58:28.133375745 +0200
++++ gajim/data/gajim-history-manager.1	2014-10-14 22:58:28.109375443 +0200
+@@ -24,12 +24,14 @@
+ Show help options
+ .It Fl c Fl Fl config-path Em directory
+ Where to look for logs file
++.El
+ .Sh FILES
+ .Bl -tag -width Ds
+ .It ~/.local/share/gajim/logs.db
+ The history database log file used when
+ .Op Fl c
+ is not specified.
++.El
+ .Sh AUTHORS
+ .An -nosplit
+ .Nm
+Index: gajim/data/gajim-remote.1
+===================================================================
+--- gajim.orig/data/gajim-remote.1	2014-10-14 22:58:28.133375745 +0200
++++ gajim/data/gajim-remote.1	2014-10-14 23:00:43.479080837 +0200
+@@ -16,6 +16,7 @@
+ .Sh OPTIONS
+ .Bl -tag -width Ds
+ .It Available commands
++.El
+ .Ss account_info Aq account
+ Gets detailed info on a account
+ .Ss add_contact Ao jid Ac Bq account
+Index: gajim/data/gajim.1
+===================================================================
+--- gajim.orig/data/gajim.1	2014-10-14 22:58:28.133375745 +0200
++++ gajim/data/gajim.1	2014-10-14 22:58:28.113375488 +0200
+@@ -57,6 +57,7 @@
+ in configuration directory
+ .It Fl c Fl Fl config-path Em directory
+ Where to look for configuration files
++.El
+ .Sh FILES
+ .Bl -tag -width Ds
+ .It ~/.cache/gajim/cache.db
