@@ -13,7 +13,7 @@ Vcs-Browser: https://github.com/jabber-at/gajim
 Package: gajim
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, python-gtk2 (>= 2.22.0), dnsutils,
-            dbus, python-dbus (>=0.81), python-nbxmpp
+            dbus, python-dbus (>=0.81), python-nbxmpp (>= 0.5.3)
 Recommends: python-openssl (>= 0.12), python-pyasn1, python-crypto,
             notification-daemon, ca-certificates
 Suggests: libxss1,
