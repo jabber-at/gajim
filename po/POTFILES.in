@@ -66,6 +66,7 @@
 [type: gettext/glade]data/gui/zeroconf_context_menu.ui
 [type: gettext/glade]data/gui/zeroconf_information_window.ui
 data/gajim.desktop.in.in
+data/gajim-remote.desktop.in.in
 src/adhoc_commands.py
 src/advanced_configuration_window.py
 src/atom_window.py

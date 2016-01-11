@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-  gajimversion="0.16.4"
+  gajimversion="0.16.5"
   if [ -d ".hg" ]; then
     node=$(hg  tip --template "{node}")
     hgversion="-${node:0:12}"
@@ -14,7 +14,7 @@
   echo "[encoding: UTF-8]" > po/POTFILES.in \
   && for p in `ls data/gui/*.ui`; do echo "[type: gettext/glade]$p" >> \
   po/POTFILES.in; done \
-  && ls -1 data/gajim.desktop.in.in \
+  && ls -1 data/gajim.desktop.in.in data/gajim-remote.desktop.in.in \
   src/*.py src/common/*.py src/command_system/*.py src/command_system/implementation/*.py src/common/zeroconf/*.py src/plugins/*.py | grep -v ipython_view.py >> \
   po/POTFILES.in \
   && echo -e "data/gajim.desktop.in\nsrc/ipython_view.py" > po/POTFILES.skip  || exit 1

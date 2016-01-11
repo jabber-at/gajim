@@ -31,6 +31,7 @@ import sys
 import os
 import logging
 import locale
+import uuid
 
 import config
 import nbxmpp
@@ -190,7 +191,7 @@ try:
         os.environ['FS_PLUGIN_PATH'] = 'gtk\\lib\\farstream-0.1'
         os.environ['GST_PLUGIN_PATH'] = 'gtk\\lib\\gstreamer-0.10'
     farstream = __import__('farstream')
-    import gst
+    gst = __import__('gst')
     import glib
     try:
         conference = gst.element_factory_make('fsrtpconference')
@@ -238,11 +239,8 @@ caps_hash = {}
 import caps_cache
 caps_cache.initialize(logger)
 
-global_id = 0
 def get_an_id():
-    global global_id
-    global_id += 1
-    return global_id
+    return str(uuid.uuid4())
 
 def get_nick_from_jid(jid):
     pos = jid.find('@')

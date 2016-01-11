@@ -98,7 +98,7 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
-CONFIG_CLEAN_FILES = gajim.desktop.in defs.py
+CONFIG_CLEAN_FILES = gajim.desktop.in gajim-remote.desktop.in defs.py
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -191,6 +191,7 @@ ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/defs.py.in \
+	$(srcdir)/gajim-remote.desktop.in.in \
 	$(srcdir)/gajim.desktop.in.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -385,7 +386,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = gui emoticons pixmaps iconsets moods activities
 desktopdir = $(datadir)/applications
-desktop_in_files = gajim.desktop.in.in 
+desktop_in_files = gajim.desktop.in.in gajim-remote.desktop.in.in
 desktop_DATA = $(desktop_in_files:.desktop.in.in=.desktop)
 installdefsdir = $(gajim_srcdir)/common
 installdefs_DATA = defs.py
@@ -405,7 +406,7 @@ EXTRA_DIST = $(desktop_in_files) \
 DISTCLEANFILES = $(desktop_DATA) \
 				 $(installdefs_DATA)
 
-CLEANFILES = gajim.desktop 
+CLEANFILES = gajim.desktop gajim-remote.desktop
 MAINTAINERCLEANFILES = Makefile.in
 all: all-recursive
 
@@ -440,6 +441,8 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 gajim.desktop.in: $(top_builddir)/config.status $(srcdir)/gajim.desktop.in.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+gajim-remote.desktop.in: $(top_builddir)/config.status $(srcdir)/gajim-remote.desktop.in.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 defs.py: $(top_builddir)/config.status $(srcdir)/defs.py.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
