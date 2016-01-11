@@ -103,7 +103,9 @@ class ConnectionArchive313(ConnectionArchive):
                 last = set_.getTagData('last')
                 if last:
                     gajim.config.set_per('accounts', self.name, 'last_mam_id', last)
-                    self.request_archive(after=last)
+                    complete = fin_.getAttr('complete')
+                    if complete != 'true':
+                        self.request_archive(after=last)
 
             del self.awaiting_answers[queryid_]
 
@@ -334,6 +336,14 @@ class ConnectionArchive136(ConnectionArchive):
     def _nec_archiving_changed_received(self, obj):
         if obj.conn.name != self.name:
             return
+        for key in ('auto', 'default'):
+            if key not in obj.conf:
+                self.archiving_136_supported = False
+                self.archive_auto_supported = False
+                self.archive_manage_supported = False
+                self.archive_manual_supported = False
+                self.archive_pref_supported = False
+                return True
         for key in ('auto', 'method_auto', 'method_local', 'method_manual',
         'default'):
             if key in obj.conf:

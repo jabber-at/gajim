@@ -320,7 +320,7 @@ class CommonConnection:
                         always_trust)
                 def _on_encrypted(output):
                     msgenc, error = output
-                    if error == 'NOT_TRUSTED':
+                    if error.startswith( 'NOT_TRUSTED'):
                         def _on_always_trust(answer):
                             if answer:
                                 gajim.thread_interface(encrypt_thread, [msg, keyID,
@@ -333,7 +333,8 @@ class CommonConnection:
                                     form_node, user_nick, keyID, attention,
                                     correction_msg, callback)
                         gajim.nec.push_incoming_event(GPGTrustKeyEvent(None,
-                            conn=self, keyID=keyID, callback=_on_always_trust))
+                            conn=self, keyID=error.split(' ')[-1],
+                            callback=_on_always_trust))
                     else:
                         self._message_encrypted_cb(output, type_, msg, msgtxt,
                             original_message, fjid, resource, jid, xhtml,
@@ -425,8 +426,6 @@ class CommonConnection:
 
         if msgenc:
             msg_iq.setTag(nbxmpp.NS_ENCRYPTED + ' x').setData(msgenc)
-            msg_iq.addChild(name='no-permanent-store',
-                namespace=nbxmpp.NS_MSG_HINTS)
 
         if form_node:
             msg_iq.addChild(node=form_node)
@@ -1215,7 +1214,7 @@ class Connection(CommonConnection, ConnectionHandlers):
                 self._connection_types = gajim.config.get_per('accounts', self.name,
                         'connection_types').split()
             else:
-                self._connection_types = ['tls', 'ssl', 'plain']
+                self._connection_types = ['tls', 'ssl']
             if self.last_connection_type:
                 if self.last_connection_type in self._connection_types:
                     self._connection_types.remove(self.last_connection_type)
@@ -1420,6 +1419,14 @@ class Connection(CommonConnection, ConnectionHandlers):
                 self._current_host['host'], self._current_host['port'], con_type))
 
         self.last_connection_type = con_type
+        if con_type == 'tls' and 'ssl' in self._connection_types:
+            # we were about to try ssl after tls, but tls succeed, so
+            # definitively stop trying ssl
+            con_types = gajim.config.get_per('accounts', self.name,
+                'connection_types').split()
+            con_types.remove('ssl')
+            gajim.config.set_per('accounts', self.name, 'connection_types',
+                ' '.join(con_types))
         if gajim.config.get_per('accounts', self.name, 'anonymous_auth'):
             name = None
         else:
@@ -1899,7 +1906,6 @@ class Connection(CommonConnection, ConnectionHandlers):
         # If we are not resuming, we ask for discovery info
         # and archiving preferences
         if not self.sm.supports_sm or (not self.sm.resuming and self.sm.enabled):
-            self.request_message_archiving_preferences()
             self.discoverInfo(gajim.config.get_per('accounts', self.name,
                 'hostname'), id_prefix='Gajim_')
 
@@ -2006,14 +2012,15 @@ class Connection(CommonConnection, ConnectionHandlers):
                 if nbxmpp.NS_ARCHIVE in obj.features:
                     self.archiving_supported = True
                     self.archiving_136_supported = True
-                if nbxmpp.NS_ARCHIVE_AUTO in obj.features:
-                    self.archive_auto_supported = True
-                if nbxmpp.NS_ARCHIVE_MANAGE in obj.features:
-                    self.archive_manage_supported = True
-                if nbxmpp.NS_ARCHIVE_MANUAL in obj.features:
-                    self.archive_manual_supported = True
-                if nbxmpp.NS_ARCHIVE_PREF in obj.features:
-                    self.archive_pref_supported = True
+                    self.request_message_archiving_preferences()
+                    if nbxmpp.NS_ARCHIVE_AUTO in obj.features:
+                        self.archive_auto_supported = True
+                    if nbxmpp.NS_ARCHIVE_MANAGE in obj.features:
+                        self.archive_manage_supported = True
+                    if nbxmpp.NS_ARCHIVE_MANUAL in obj.features:
+                        self.archive_manual_supported = True
+                    if nbxmpp.NS_ARCHIVE_PREF in obj.features:
+                        self.archive_pref_supported = True
                 if nbxmpp.NS_BLOCKING in obj.features:
                     self.blocking_supported = True
                 if nbxmpp.NS_ADDRESS in obj.features:
