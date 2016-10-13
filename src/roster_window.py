@@ -60,7 +60,6 @@ from common import gajim
 from common import helpers
 from common.exceptions import GajimGeneralException
 from common import i18n
-from common import pep
 from common import location_listener
 from common import ged
 
@@ -71,7 +70,6 @@ if dbus_support.supported:
     import dbus
 
 from nbxmpp.protocol import NS_FILE, NS_ROSTERX, NS_CONFERENCE
-from common.pep import MOODS, ACTIVITIES
 
 #(icon, name, type, jid, account, editable, second pixbuf)
 (
@@ -1521,6 +1519,23 @@ class RosterWindow:
                     self.tree.expand_row(path, False)
         self.modelfilter.foreach(func)
 
+        # Now redraw group icons for all groups, even hidden ones
+        def func2(model, path, iter_):
+            type_ = model[iter_][C_TYPE]
+            if type_ != 'group':
+                return
+            acct = model[iter_][C_ACCOUNT].decode('utf-8')
+            jid = model[iter_][C_JID].decode('utf-8')
+            key = acct + jid
+            if key in self.collapsed_rows:
+                model[iter_][C_IMG] = gajim.interface.\
+                    jabber_state_images['16']['closed']
+            else:
+                model[iter_][C_IMG] = gajim.interface.\
+                    jabber_state_images['16']['opened']
+
+        self.model.foreach(func2)
+
     def _adjust_account_expand_collapse_state(self, account):
         """
         Expand/collapse account row based on self.collapsed_rows
@@ -1587,6 +1602,8 @@ class RosterWindow:
     def contact_is_visible(self, contact, account):
         if self.rfilter_enabled:
             return self.rfilter_string in contact.get_shown_name().lower()
+        if gajim.config.get('showoffline'):
+            return True
         if self.contact_has_pending_roster_events(contact, account):
             return True
 
@@ -1644,8 +1661,6 @@ class RosterWindow:
                 return gajim.config.get('show_transports_group') and \
                     (gajim.account_is_connected(account) or \
                     gajim.config.get('showoffline'))
-            if gajim.config.get('showoffline'):
-                return True
 
             if self.regroup:
                 # C_ACCOUNT for groups depends on the order
@@ -1671,6 +1686,8 @@ class RosterWindow:
                 if model.iter_has_child(titer):
                     iter_c = model.iter_children(titer)
                     while iter_c:
+                        if not model[iter_c][C_NAME]: # see #8341
+                            return False
                         if self.rfilter_string in model[iter_c][C_NAME].decode(
                         'utf-8').lower():
                             return True
@@ -1846,7 +1863,7 @@ class RosterWindow:
 
                 tim = time.localtime(float(result[2]))
                 session.roster_message(jid, result[1], tim, msg_type='chat',
-                        msg_id=result[0])
+                    msg_log_id=result[0])
                 gajim.logger.set_shown_unread_msgs(result[0])
 
             elif (time.time() - result[2]) > 2592000:
@@ -1947,16 +1964,16 @@ class RosterWindow:
         pending events
         """
 
-        msg_ids = []
+        msg_log_ids = []
         for ev in event_list:
             if ev.type_ != 'printed_chat':
                 continue
-            if len(ev.parameters) > 3 and ev.parameters[3]:
-                # There is a msg_id
-                msg_ids.append(ev.parameters[3])
+            if ev.msg_log_id:
+                # There is a msg_log_id
+                msg_log_ids.append(ev.msg_log_id)
 
-        if msg_ids:
-            gajim.logger.set_read_messages(msg_ids)
+        if msg_log_ids:
+            gajim.logger.set_read_messages(msg_log_ids)
 
         contact_list = ((event.jid.split('/')[0], event.account) for event in \
                 event_list)
@@ -1977,59 +1994,60 @@ class RosterWindow:
         """
         If an event was handled, return True, else return False
         """
-        data = event.parameters
         ft = gajim.interface.instances['file_transfers']
         event = gajim.events.get_first_event(account, jid, event.type_)
         if event.type_ == 'normal':
             dialogs.SingleMessageWindow(account, jid,
-                action='receive', from_whom=jid, subject=data[1],
-                message=data[0], resource=data[5], session=data[8],
-                form_node=data[9])
+                action='receive', from_whom=jid, subject=event.subject,
+                message=event.message, resource=event.resource,
+                session=event.session, form_node=event.form_node)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'file-request':
             contact = gajim.contacts.get_contact_with_highest_priority(account,
                     jid)
-            ft.show_file_request(account, contact, data)
+            ft.show_file_request(account, contact, event.file_props)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ in ('file-request-error', 'file-send-error'):
-            ft.show_send_error(data)
+            ft.show_send_error(event.file_props)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ in ('file-error', 'file-stopped'):
             msg_err = ''
-            if data.error == -1:
+            if event.file_props.error == -1:
                 msg_err = _('Remote contact stopped transfer')
-            elif data.error == -6:
+            elif event.file_props.error == -6:
                 msg_err = _('Error opening file')
-            ft.show_stopped(jid, data, error_msg=msg_err)
+            ft.show_stopped(jid, event.file_props, error_msg=msg_err)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'file-hash-error':
-            ft.show_hash_error(jid, data, account)
+            ft.show_hash_error(jid, event.file_props, account)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'file-completed':
-            ft.show_completed(jid, data)
+            ft.show_completed(jid, event.file_props)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'gc-invitation':
-            dialogs.InvitationReceivedDialog(account, data[0], data[4], data[2],
-                data[1], is_continued=data[3])
+            dialogs.InvitationReceivedDialog(account, event.room_jid,
+                event.from_jid, event.password, event.reason,
+                is_continued=event.is_continued)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'subscription_request':
-            dialogs.SubscriptionRequestWindow(jid, data[0], account, data[1])
+            dialogs.SubscriptionRequestWindow(jid, event.text, account,
+                event.nick)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'unsubscribed':
-            gajim.interface.show_unsubscribed_dialog(account, data)
+            gajim.interface.show_unsubscribed_dialog(account, event.contact)
             gajim.events.remove_events(account, jid, event)
             return True
         elif event.type_ == 'jingle-incoming':
-            peerjid, sid, content_types = data
-            dialogs.VoIPCallReceivedDialog(account, peerjid, sid, content_types)
+            dialogs.VoIPCallReceivedDialog(account, event.peerjid, event.sid,
+                event.content_types)
             gajim.events.remove_events(account, jid, event)
             return True
         return False
@@ -2455,9 +2473,6 @@ class RosterWindow:
                 gajim.config.set('roster_x-position', x)
                 gajim.config.set('roster_y-position', y)
             width, height = self.window.get_size()
-            # For the width use the size of the vbox containing the tree and
-            # status combo, this will cancel out any hpaned width
-            width = self.xml.get_object('roster_vbox2').allocation.width
             gajim.config.set('roster_width', width)
             gajim.config.set('roster_height', height)
             if not self.xml.get_object('roster_vbox2').get_property('visible'):
@@ -2739,21 +2754,24 @@ class RosterWindow:
             return
         if obj.session.control and obj.mtype == 'chat':
             typ = ''
+            xep0184_id = None
             if obj.mtype == 'error':
                 typ = 'error'
             if obj.forwarded and obj.sent:
                 typ = 'out'
+                xep0184_id = obj.id_
 
             obj.session.control.print_conversation(obj.msgtxt, typ,
                 tim=obj.timestamp, encrypted=obj.encrypted, subject=obj.subject,
                 xhtml=obj.xhtml, displaymarking=obj.displaymarking,
-                msg_id=obj.msg_id, correct_id=(obj.id_, obj.correct_id))
-            if obj.msg_id:
+                msg_log_id=obj.msg_log_id, correct_id=(obj.id_, obj.correct_id),
+                xep0184_id=xep0184_id)
+            if obj.msg_log_id:
                 pw = obj.session.control.parent_win
                 end = obj.session.control.was_at_the_end
                 if not pw or (pw.get_active_control() and obj.session.control \
                 == pw.get_active_control() and pw.is_active() and end):
-                    gajim.logger.set_read_messages([obj.msg_id])
+                    gajim.logger.set_read_messages([obj.msg_log_id])
         elif obj.popup and obj.mtype == 'chat':
             contact = gajim.contacts.get_contact(obj.conn.name, obj.jid)
             obj.session.control = gajim.interface.new_chat(contact,
@@ -4137,7 +4155,7 @@ class RosterWindow:
         session = None
         if first_ev:
             if first_ev.type_ in ('chat', 'normal'):
-                session = first_ev.parameters[8]
+                session = first_ev.session
             fjid = jid
             if resource:
                 fjid += '/' + resource
@@ -4185,7 +4203,8 @@ class RosterWindow:
             for account in accounts:
                 if group in gajim.groups[account]: # This account has this group
                     gajim.groups[account][group]['expand'] = True
-                    if account + group in self.collapsed_rows:
+                    if account + group in self.collapsed_rows \
+                    and not self.rfilter_enabled:
                         self.collapsed_rows.remove(account + group)
                 for contact in gajim.contacts.iter_contacts(account):
                     jid = contact.jid
@@ -4198,7 +4217,8 @@ class RosterWindow:
                             self.tree.expand_row(path, False)
         elif type_ == 'account':
             account = accounts[0] # There is only one cause we don't use merge
-            if account in self.collapsed_rows:
+            if account in self.collapsed_rows \
+            and not self.rfilter_enabled:
                 self.collapsed_rows.remove(account)
             self.draw_account(account)
             # When we expand, groups are collapsed. Restore expand state
@@ -4214,7 +4234,8 @@ class RosterWindow:
             account = model[titer][C_ACCOUNT].decode('utf-8')
             contact = gajim.contacts.get_contact(account, jid)
             for group in contact.groups:
-                if account + group + jid in self.collapsed_rows:
+                if account + group + jid in self.collapsed_rows \
+                and not self.rfilter_enabled:
                     self.collapsed_rows.remove(account + group + jid)
             family = gajim.contacts.get_metacontacts_family(account, jid)
             nearby_family = \
@@ -4249,11 +4270,13 @@ class RosterWindow:
             for account in accounts:
                 if group in gajim.groups[account]: # This account has this group
                     gajim.groups[account][group]['expand'] = False
-                    if account + group not in self.collapsed_rows:
+                    if account + group not in self.collapsed_rows \
+                    and not self.rfilter_enabled:
                         self.collapsed_rows.append(account + group)
         elif type_ == 'account':
             account = accounts[0] # There is only one cause we don't use merge
-            if account not in self.collapsed_rows:
+            if account not in self.collapsed_rows \
+            and not self.rfilter_enabled:
                 self.collapsed_rows.append(account)
             self.draw_account(account)
         elif type_ == 'contact':
@@ -4265,7 +4288,8 @@ class RosterWindow:
             if not groups:
                 groups = [_('General')]
             for group in groups:
-                if account + group + jid not in self.collapsed_rows:
+                if account + group + jid not in self.collapsed_rows \
+                and not self.rfilter_enabled:
                     self.collapsed_rows.append(account + group + jid)
             family = gajim.contacts.get_metacontacts_family(account, jid)
             nearby_family  = \
@@ -4781,8 +4805,12 @@ class RosterWindow:
             if type_dest == 'account':
                 new_grp = grp_source_list[-1]
             elif type_dest == 'group':
-                new_grp = model[iter_dest][C_JID].decode('utf-8') + delimiter +\
-                    grp_source_list[-1]
+                grp_dest = model[iter_dest][C_JID].decode('utf-8')
+                grp_dest_list = grp_dest.split(delimiter)
+                # Do not allow to drop on a subgroup of source group
+                if grp_source_list[0] != grp_dest_list[0]:
+                    new_grp = model[iter_dest][C_JID].decode('utf-8') + \
+                    delimiter + grp_source_list[-1]
             if new_grp:
                 self.move_group(grp_source, new_grp, account_source)
 
@@ -6212,6 +6240,10 @@ class RosterWindow:
                 # No name was given for this bookmark.
                 # Use the first part of JID instead...
                 name = bookmark['jid'].split("@")[0]
+
+            # Shorten long names
+            name = (name[:42] + '..') if len(name) > 42 else name
+
             # Do not use underline.
             item = gtk.MenuItem(name, False)
             item.connect('activate', self.on_bookmark_menuitem_activate,

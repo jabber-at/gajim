@@ -1,4 +1,5 @@
 data/gajim.desktop.in
+data/gajim-remote.desktop.in
 src/ipython_view.py
 plugins/acronyms_expander/acronyms_expander.py
 plugins/acronyms_expander/__init__.py

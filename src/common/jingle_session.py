@@ -30,11 +30,15 @@ Handles Jingle sessions (XEP 0166)
 
 import gajim #Get rid of that?
 import nbxmpp
+
+from common.connection_handlers_events import JingleConnectedReceivedEvent, \
+    JingleErrorReceivedEvent, JingleTransferCancelledEvent, \
+    JingleRequestReceivedEvent, JingleDisconnectedReceivedEvent
+from common.file_props import FilesProp
 from jingle_transport import get_jingle_transport, JingleTransportIBB
 from jingle_content import get_jingle_content, JingleContentSetupException
 from jingle_content import JingleContent
 from jingle_ft import STATE_TRANSPORT_REPLACE
-from common.connection_handlers_events import *
 import logging
 log = logging.getLogger("gajim.c.jingle_session")
 
@@ -57,6 +61,11 @@ class TieBreak(Exception):
     """
     Exception that should be raised in case of a tie, when we overrule the other
     action
+    """
+
+class FailedApplication(Exception):
+    """
+    Exception that should be raised in case responder supports none of the payload-types offered by the initiator
     """
 
 class JingleSession(object):
@@ -348,6 +357,10 @@ class JingleSession(object):
         except OutOfOrder:
             # FIXME
             self.__send_error(stanza, 'unexpected-request', 'out-of-order')
+        except FailedApplication:
+            reason = nbxmpp.Node('reason')
+            reason.addChild('failed-application')
+            self._session_terminate(reason)
 
     def __ack(self, stanza, jingle, error, action):
         """
@@ -420,10 +433,13 @@ class JingleSession(object):
                 raise nbxmpp.NodeProcessed
 
     def __on_session_info(self, stanza, jingle, error, action):
-        # TODO: ringing, active, (un)hold, (un)mute
+        # TODO: active, (un)hold, (un)mute
+        payload = jingle.getPayload()
+        if payload[0].getName() == 'ringing':
+            # ignore ringing
+            raise nbxmpp.NodeProcessed
         if self.state != JingleStates.active:
             raise OutOfOrder
-        payload = jingle.getPayload()
         for p in payload:
             if p.getName() == 'checksum':
                 hash_ = p.getTag('file').getTag(name='hash',

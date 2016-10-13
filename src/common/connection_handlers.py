@@ -30,24 +30,41 @@
 
 import os
 import base64
-import sys
 import operator
 import hashlib
 import gobject
-import locale
 
-from time import (altzone, daylight, gmtime, localtime, mktime, strftime,
+from time import (altzone, daylight, gmtime, localtime, strftime,
         time as time_time, timezone, tzname)
-from calendar import timegm
 
 import nbxmpp
 import common.caps_cache as capscache
+from common.connection_handlers_events import InformationEvent, \
+    AgentItemsErrorReceivedEvent, AgentInfoErrorReceivedEvent, RosterInfoEvent, \
+    BadGPGPassphraseEvent, SignedInEvent, MucOwnerReceivedEvent, MucAdminReceivedEvent, \
+    PingReceivedEvent, OurShowEvent, StreamReceivedEvent, BlockingEvent, \
+    SearchFormReceivedEvent, GPGPasswordRequiredEvent, RosterReceivedEvent, \
+    GMailQueryReceivedEvent, RosterItemExchangeEvent, TimeRevisedRequestEvent, \
+    GcMessageReceivedEvent, TimeRequestEvent, VersionResultReceivedEvent, \
+    PrivateStorageReceivedEvent, RosterSetReceivedEvent, VersionRequestEvent, \
+    LastRequestEvent, TimeResultReceivedEvent, GmailNewMailReceivedEvent, \
+    PrivateStorageBookmarksReceivedEvent, BookmarksReceivedEvent, \
+    PrivateStorageRosternotesReceivedEvent, RosternotesReceivedEvent, \
+    StreamConflictReceivedEvent, StreamOtherHostReceivedEvent, MessageReceivedEvent, \
+    ArchivingErrorReceivedEvent, ArchivingPreferencesChangedReceivedEvent, \
+    NotificationEvent, GcInvitationReceivedEvent, GcDeclineReceivedEvent, \
+    MessageErrorEvent, LastResultReceivedEvent, PresenceReceivedEvent, FailedDecryptEvent, \
+    DecryptedMessageReceivedEvent, MamDecryptedMessageReceivedEvent, HttpAuthReceivedEvent, \
+    IqErrorReceivedEvent, VcardReceivedEvent, AgentRemovedEvent, MetacontactsReceivedEvent, \
+    PEPConfigReceivedEvent, PEPReceivedEvent, AgentItemsReceivedEvent, \
+    AgentInfoReceivedEvent, VcardPublishedEvent, VcardNotPublishedEvent
+#from common.connection_handlers_events import *
+from common.logger import LOG_DB_PATH
 
 from pep import LOCATION_DATA
 from common import helpers
 from common import gajim
 from common import exceptions
-from common import dataforms
 from common import jingle_xtls
 from common.commands import ConnectionCommands
 from common.pubsub import ConnectionPubSub
@@ -56,10 +73,8 @@ from common.protocol.bytestream import ConnectionSocks5Bytestream
 from common.protocol.bytestream import ConnectionIBBytestream
 from common.message_archiving import ConnectionArchive136
 from common.message_archiving import ConnectionArchive313
-from common.connection_handlers_events import *
 
 from common import ged
-from common import nec
 from common.nec import NetworkEvent
 
 from common.jingle import ConnectionJingle
@@ -1092,8 +1107,7 @@ class ConnectionHandlersBase:
         decmsg = self.gpg.decrypt(encmsg, keyID)
         decmsg = self.connection.Dispatcher.replace_non_character(decmsg)
         # \x00 chars are not allowed in C (so in GTK)
-        obj.msgtxt = decmsg.replace('\x00', '').encode(
-            locale.getpreferredencoding()).decode('utf-8')
+        obj.msgtxt = decmsg.replace('\x00', '').decode('utf-8')
         obj.encrypted = 'xep27'
         self.gpg_messages_to_decrypt.remove([encmsg, keyID, obj])
 
@@ -1171,12 +1185,23 @@ class ConnectionHandlersBase:
         contact = gajim.contacts.get_contact(self.name, obj.jid)
         nick = obj.resource
         gc_contact = gajim.contacts.get_gc_contact(self.name, obj.jid, nick)
+        if obj.sent:
+            jid_to = obj.stanza.getFrom()
+        else:
+            jid_to = obj.stanza.getTo()
+        reply = False
+        if not jid_to:
+            reply = True
+        else:
+            fjid_to = helpers.parse_jid(str(jid_to))
+            jid_to = gajim.get_jid_without_resource(fjid_to)
+            if jid_to == gajim.get_jid_from_account(self.name):
+                reply = True
         if obj.receipt_request_tag and gajim.config.get_per('accounts',
         self.name, 'answer_receipts') and ((contact and contact.sub \
         not in (u'to', u'none')) or gc_contact) and obj.mtype != 'error' and \
-        not obj.forwarded:
+        reply:
             receipt = nbxmpp.Message(to=obj.fjid, typ='chat')
-            receipt.setID(obj.id_)
             receipt.setTag('received', namespace='urn:xmpp:receipts',
                 attrs={'id': obj.id_})
 
@@ -1185,13 +1210,21 @@ class ConnectionHandlersBase:
             self.connection.send(receipt)
 
         # We got our message's receipt
-        if obj.receipt_received_tag and obj.session.control and \
-        gajim.config.get_per('accounts', self.name, 'request_receipt'):
-            id_ = obj.receipt_received_tag.getAttr('id')
-            if not id_:
-                # old XEP implementation
-                id_ = obj.id_
-            obj.session.control.conv_textview.hide_xep0184_warning(id_)
+        if obj.receipt_received_tag and gajim.config.get_per('accounts',
+        self.name, 'request_receipt'):
+            ctrl = obj.session.control
+            if not ctrl:
+                # Received <message> doesn't have the <thread> element?
+                # search in all sessions
+                for s in self.get_sessions(obj.jid):
+                    if s.control:
+                        ctrl = s.control
+            if ctrl:
+                id_ = obj.receipt_received_tag.getAttr('id')
+                if not id_:
+                    # old XEP implementation
+                    id_ = obj.id_
+                ctrl.conv_textview.hide_xep0184_warning(id_)
 
         if obj.mtype == 'error':
             if not obj.msgtxt:
@@ -1237,7 +1270,7 @@ class ConnectionHandlersBase:
                 self.dispatch('DB_ERROR', (pritext, sectext))
         gajim.nec.push_incoming_event(MessageErrorEvent(None, conn=self,
             fjid=frm, error_code=msg.getErrorCode(), error_msg=error_msg,
-            msg=msgtxt, time_=tim, session=session))
+            msg=msgtxt, time_=tim, session=session, stanza=msg))
 
     def _LastResultCB(self, con, iq_obj):
         log.debug('LastResultCB')
@@ -1425,6 +1458,8 @@ ConnectionHandlersBase, ConnectionJingle, ConnectionIBBytestream):
         # ID of urn:xmpp:ping requests
         self.awaiting_xmpp_ping_id = None
         self.continue_connect_info = None
+        # IDs of sent messages (https://trac.gajim.org/ticket/8222)
+        self.sent_message_ids = []
 
         try:
             self.sleeper = common.sleepy.Sleepy()
@@ -2169,6 +2204,8 @@ ConnectionHandlersBase, ConnectionJingle, ConnectionIBBytestream):
         gajim.nec.push_incoming_event(SignedInEvent(None, conn=self))
         self.send_awaiting_pep()
         self.continue_connect_info = None
+        # hashes of already received messages
+        self.received_message_hashes = []
 
     def request_gmail_notifications(self):
         if not self.connection or self.connected < 2:

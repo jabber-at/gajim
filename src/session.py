@@ -23,6 +23,7 @@
 
 from common import helpers
 
+from common import events
 from common import exceptions
 from common import gajim
 from common import stanza_session
@@ -67,10 +68,17 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             return
         contact = gajim.contacts.get_contact(self.conn.name, obj.jid,
             obj.resource)
+        if not contact:
+            contact = gajim.contacts.get_gc_contact(self.conn.name, obj.jid,
+                obj.resource)
         if self.resource != obj.resource:
             self.resource = obj.resource
             if self.control:
-                self.control.contact = contact
+                if isinstance(contact, contacts.GC_Contact):
+                    self.control.gc_contact = contact
+                    self.control.contact = contact.as_contact()
+                else:
+                    self.control.contact = contact
                 if self.control.resource:
                     self.control.change_resource(self.resource)
 
@@ -92,7 +100,7 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
                     msg_to_log = obj.xhtml
                 else:
                     msg_to_log = obj.msgtxt
-                obj.msg_id = gajim.logger.write(log_type, obj.fjid,
+                obj.msg_log_id = gajim.logger.write(log_type, obj.fjid,
                     msg_to_log, tim=obj.timestamp, subject=obj.subject)
             except exceptions.PysqliteOperationalError, e:
                 gajim.nec.push_incoming_event(InformationEvent(None,
@@ -135,8 +143,8 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
                 # Brand new message, incoming.
                 contact.our_chatstate = obj.chatstate
                 contact.chatstate = obj.chatstate
-                if obj.msg_id: # Do not overwrite an existing msg_id with None
-                    contact.msg_id = obj.msg_id
+                if obj.msg_log_id: # Do not overwrite an existing msg_log_id with None
+                    contact.msg_log_id = obj.msg_log_id
 
         # THIS MUST BE AFTER chatstates handling
         # AND BEFORE playsound (else we ear sounding on chatstates!)
@@ -162,7 +170,11 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             if ctrl:
                 self.control = ctrl
                 self.control.set_session(self)
-                self.control.contact = contact
+                if isinstance(contact, contacts.GC_Contact):
+                    self.control.gc_contact = contact
+                    self.control.contact = contact.as_contact()
+                else:
+                    self.control.contact = contact
 
         if not pm:
             self.roster_message2(obj)
@@ -171,7 +183,7 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             gajim.interface.remote_ctrl.raise_signal('NewMessage', (
                 self.conn.name, [obj.fjid, obj.msgtxt, obj.timestamp,
                 obj.encrypted, obj.mtype, obj.subject, obj.chatstate,
-                obj.msg_id, obj.user_nick, obj.xhtml, obj.form_node]))
+                obj.msg_log_id, obj.user_nick, obj.xhtml, obj.form_node]))
 
     def roster_message2(self, obj):
         """
@@ -224,11 +236,11 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
 
         obj.popup = helpers.allow_popup_window(self.conn.name)
 
-        type_ = 'chat'
+        event_t = events.ChatEvent
         event_type = 'message_received'
 
         if obj.mtype == 'normal':
-            type_ = 'normal'
+            event_t = events.NormalEvent
             event_type = 'single_message_received'
 
         if self.control and obj.mtype != 'normal':
@@ -242,17 +254,19 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
 
         if (not self.control and obj.mtype != 'normal') or \
         (obj.mtype == 'normal' and not obj.popup):
-            event = gajim.events.create_event(type_, (obj.msgtxt, obj.subject,
-                obj.mtype, obj.timestamp, obj.encrypted, obj.resource,
-                obj.msg_id, obj.xhtml, self, obj.form_node, obj.displaymarking,
-                obj.forwarded and obj.sent),
+            event = event_t(obj.msgtxt, obj.subject, obj.mtype, obj.timestamp,
+                obj.encrypted, obj.resource, obj.msg_log_id,
+                correct_id=(obj.id_, obj.correct_id), xhtml=obj.xhtml,
+                session=self, form_node=obj.form_node,
+                displaymarking=obj.displaymarking,
+                sent_forwarded=obj.forwarded and obj.sent,
                 show_in_roster=obj.show_in_roster,
                 show_in_systray=obj.show_in_systray)
 
             gajim.events.add_event(self.conn.name, fjid, event)
 
     def roster_message(self, jid, msg, tim, encrypted=False, msg_type='',
-    subject=None, resource='', msg_id=None, user_nick='', xhtml=None,
+    subject=None, resource='', msg_log_id=None, user_nick='', xhtml=None,
     form_node=None, displaymarking=None):
         """
         Display the message or show notification in the roster
@@ -321,17 +335,17 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
             self.control.print_conversation(msg, typ, tim=tim, encrypted=encrypted,
                     subject=subject, xhtml=xhtml, displaymarking=displaymarking)
 
-            if msg_id:
-                gajim.logger.set_read_messages([msg_id])
+            if msg_log_id:
+                gajim.logger.set_read_messages([msg_log_id])
 
             return
 
         # We save it in a queue
-        type_ = 'chat'
+        event_t = events.ChatEvent
         event_type = 'message_received'
 
         if msg_type == 'normal':
-            type_ = 'normal'
+            event_t = events.NormalEvent
             event_type = 'single_message_received'
 
         show_in_roster = notify.get_show_in_roster(event_type, self.conn.name,
@@ -339,9 +353,10 @@ class ChatControlSession(stanza_session.EncryptedStanzaSession):
         show_in_systray = notify.get_show_in_systray(event_type, self.conn.name,
                 contact)
 
-        event = gajim.events.create_event(type_, (msg, subject, msg_type, tim,
-            encrypted, resource, msg_id, xhtml, self, form_node, displaymarking,
-            False), show_in_roster=show_in_roster,
+        event = event_t(msg, subject, msg_type, tim, encrypted, resource,
+            msg_log_id, xhtml=xhtml, session=self, form_node=form_node,
+            displaymarking=displaymarking, sent_forwarded=False,
+            show_in_roster=show_in_roster,
             show_in_systray=show_in_systray)
 
         gajim.events.add_event(self.conn.name, fjid, event)

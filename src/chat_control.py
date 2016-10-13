@@ -40,6 +40,7 @@ import history_window
 import notify
 import re
 
+from common import events
 from common import gajim
 from common import helpers
 from common import exceptions
@@ -51,7 +52,6 @@ from message_textview import MessageTextView
 from common.stanza_session import EncryptedStanzaSession, ArchivingStanzaSession
 from common.contacts import GC_Contact
 from common.logger import constants
-from common.pep import MOODS, ACTIVITIES
 from nbxmpp.protocol import NS_XHTML, NS_XHTML_IM, NS_FILE, NS_MUC
 from nbxmpp.protocol import NS_RECEIPTS, NS_ESESSION
 from nbxmpp.protocol import NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO
@@ -75,10 +75,6 @@ try:
 except ImportError:
     HAS_GTK_SPELL = False
 
-from common import dbus_support
-if dbus_support.supported:
-    import dbus
-    import remote_control
 
 ################################################################################
 class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
@@ -866,7 +862,7 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
             keyID=keyID, type_=type_, chatstate=chatstate, msg_id=msg_id,
             resource=resource, user_nick=self.user_nick, xhtml=xhtml,
             label=label, callback=_cb, callback_args=[callback] + callback_args,
-            control=self, attention=attention, correction_msg=correction_msg))
+            control=self, attention=attention, correction_msg=correction_msg, automatic_message=False))
 
         # Record the history of sent messages
         self.save_message(message, 'sent')
@@ -907,7 +903,7 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
     def print_conversation_line(self, text, kind, name, tim,
     other_tags_for_name=[], other_tags_for_time=[], other_tags_for_text=[],
     count_as_new=True, subject=None, old_kind=None, xhtml=None, simple=False,
-    xep0184_id=None, graphics=True, displaymarking=None, msg_id=None,
+    xep0184_id=None, graphics=True, displaymarking=None, msg_log_id=None,
     correct_id=None):
         """
         Print 'chat' type messages
@@ -927,6 +923,13 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
         correct_id[1] == self.last_received_id[name]:
             self.conv_textview.correct_last_received_message(text, xhtml,
                 name, old_txt)
+        elif correct_id and correct_id[1] and \
+        self.conv_textview.last_sent_message_marks[0] and \
+        correct_id[1] == self.last_received_id[name]:
+            # this is for carbon copied messages that are sent from another
+            # resource
+            self.conv_textview.correct_last_sent_message(text, xhtml,
+                self.get_our_nick(), old_txt)
         else:
             textview.print_conversation_line(text, jid, kind, name, tim,
                 other_tags_for_name, other_tags_for_time, other_tags_for_text,
@@ -938,7 +941,7 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
 
         if not count_as_new:
             return
-        if kind in ('incoming', 'outgoing'):
+        if kind in ('incoming', 'incoming_queue', 'outgoing'):
             self.last_received_txt[name] = text
             if correct_id:
                 self.last_received_id[name] = correct_id[0]
@@ -970,20 +973,23 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
                 # other_tags_for_text == ['marked'] --> highlighted gc message
                 if gc_message:
                     if 'marked' in other_tags_for_text:
-                        type_ = 'printed_marked_gc_msg'
+                        event_type = events.PrintedMarkedGcMsgEvent
                     else:
-                        type_ = 'printed_gc_msg'
+                        event_type = events.PrintedGcMsgEvent
                     event = 'gc_message_received'
                 else:
-                    type_ = 'printed_' + self.type_id
+                    if self.type_id == message_control.TYPE_CHAT:
+                        event_type = events.PrintedChatEvent
+                    else:
+                        event_type = events.PrintedPmEvent
                     event = 'message_received'
                 show_in_roster = notify.get_show_in_roster(event,
                     self.account, self.contact, self.session)
                 show_in_systray = notify.get_show_in_systray(event,
-                    self.account, self.contact, type_)
+                    self.account, self.contact, event_type.type_)
 
-                event = gajim.events.create_event(type_, (text, subject, self,
-                    msg_id), show_in_roster=show_in_roster,
+                event = event_type(text, subject, self, msg_log_id,
+                    show_in_roster=show_in_roster,
                     show_in_systray=show_in_systray)
                 gajim.events.add_event(self.account, full_jid, event)
                 # We need to redraw contact if we show in roster
@@ -2508,7 +2514,7 @@ class ChatControl(ChatControlBase):
 
     def print_conversation(self, text, frm='', tim=None, encrypted=False,
     subject=None, xhtml=None, simple=False, xep0184_id=None,
-    displaymarking=None, msg_id=None, correct_id=None):
+    displaymarking=None, msg_log_id=None, correct_id=None):
         """
         Print a line in the conversation
 
@@ -2573,7 +2579,7 @@ class ChatControl(ChatControlBase):
         ChatControlBase.print_conversation_line(self, text, kind, name, tim,
             subject=subject, old_kind=self.old_msg_kind, xhtml=xhtml,
             simple=simple, xep0184_id=xep0184_id, displaymarking=displaymarking,
-            msg_id=msg_id, correct_id=correct_id)
+            msg_log_id=msg_log_id, correct_id=correct_id)
         if text.startswith('/me ') or text.startswith('/me\n'):
             self.old_msg_kind = None
         else:
@@ -2731,7 +2737,7 @@ class ChatControl(ChatControlBase):
 
         gajim.nec.push_outgoing_event(MessageOutgoingEvent(None,
             account=self.account, jid=self.contact.jid, chatstate=state,
-            msg_id=contact.msg_id, control=self))
+            msg_id=contact.msg_log_id, control=self))
 
         contact.our_chatstate = state
         if state == 'active':
@@ -3011,7 +3017,8 @@ class ChatControl(ChatControlBase):
         local_old_kind = None
         self.conv_textview.just_cleared = True
         for row in rows: # row[0] time, row[1] has kind, row[2] the message
-            if not row[2]: # message is empty, we don't print it
+            msg = row[2]
+            if not msg: # message is empty, we don't print it
                 continue
             if row[1] in (constants.KIND_CHAT_MSG_SENT,
                             constants.KIND_SINGLE_MSG_SENT):
@@ -3032,9 +3039,12 @@ class ChatControl(ChatControlBase):
             else:
                 small_attr = []
             xhtml = None
-            if row[2].startswith('<body '):
-                xhtml = row[2]
-            ChatControlBase.print_conversation_line(self, row[2], kind, name,
+            if msg.startswith('<body '):
+                xhtml = msg
+            if row[3]:
+                msg = _('Subject: %(subject)s\n%(message)s') % \
+                    {'subject': row[3], 'message': msg}
+            ChatControlBase.print_conversation_line(self, msg, kind, name,
                 tim, small_attr, small_attr + ['restored_message'],
                 small_attr + ['restored_message'], False,
                 old_kind=local_old_kind, xhtml=xhtml)
@@ -3060,23 +3070,21 @@ class ChatControl(ChatControlBase):
         for event in events:
             if event.type_ != self.type_id:
                 continue
-            data = event.parameters
-            kind = data[2]
-            if kind == 'error':
+            if event.kind == 'error':
                 kind = 'info'
             else:
                 kind = 'print_queue'
-            if data[11]:
+            if event.sent_forwarded:
                 kind = 'out'
-            dm = data[10]
-            self.print_conversation(data[0], kind, tim=data[3],
-                encrypted=data[4], subject=data[1], xhtml=data[7],
-                displaymarking=dm)
-            if len(data) > 6 and isinstance(data[6], int):
-                message_ids.append(data[6])
+            self.print_conversation(event.message, kind, tim=event.time,
+                encrypted=event.encrypted, subject=event.subject,
+                xhtml=event.xhtml, displaymarking=event.displaymarking,
+                correct_id=event.correct_id)
+            if isinstance(event.msg_log_id, int):
+                message_ids.append(event.msg_log_id)
 
-            if len(data) > 8 and not self.session:
-                self.set_session(data[8])
+            if event.session and not self.session:
+                self.set_session(event.session)
         if message_ids:
             gajim.logger.set_read_messages(message_ids)
         gajim.events.remove_events(self.account, jid_with_resource,
@@ -3339,7 +3347,7 @@ class ChatControl(ChatControlBase):
     def _get_file_props_event(self, file_props, type_):
         evs = gajim.events.get_events(self.account, self.contact.jid, [type_])
         for ev in evs:
-            if ev.parameters == file_props:
+            if ev.file_props == file_props:
                 return ev
         return None
 
@@ -3403,15 +3411,13 @@ class ChatControl(ChatControlBase):
         self._add_info_bar_message(markup, [b], file_props, gtk.MESSAGE_ERROR)
 
     def _on_accept_gc_invitation(self, widget, event):
-        room_jid = event.parameters[0]
-        password = event.parameters[2]
-        is_continued = event.parameters[3]
         try:
-            if is_continued:
-                gajim.interface.join_gc_room(self.account, room_jid,
-                    gajim.nicks[self.account], password, is_continued=True)
+            if event.is_continued:
+                gajim.interface.join_gc_room(self.account, event.room_jid,
+                    gajim.nicks[self.account], event.password,
+                    is_continued=True)
             else:
-                dialogs.JoinGroupchatWindow(self.account, room_jid)
+                dialogs.JoinGroupchatWindow(self.account, event.room_jid)
         except GajimGeneralException:
             pass
         gajim.events.remove_events(self.account, self.contact.jid, event=event)
@@ -3420,17 +3426,15 @@ class ChatControl(ChatControlBase):
         gajim.events.remove_events(self.account, self.contact.jid, event=event)
 
     def _get_gc_invitation(self, event):
-        room_jid = event.parameters[0]
-        comment = event.parameters[1]
-        markup = '<b>%s:</b> %s' % (_('Groupchat Invitation'), room_jid)
-        if comment:
-            markup += ' (%s)' % comment
+        markup = '<b>%s:</b> %s' % (_('Groupchat Invitation'), event.room_jid)
+        if event.comment:
+            markup += ' (%s)' % event.comment
         b1 = gtk.Button(_('_Join'))
         b1.connect('clicked', self._on_accept_gc_invitation, event)
         b2 = gtk.Button(stock=gtk.STOCK_CANCEL)
         b2.connect('clicked', self._on_cancel_gc_invitation, event)
-        self._add_info_bar_message(markup, [b1, b2], event.parameters,
-            gtk.MESSAGE_QUESTION)
+        self._add_info_bar_message(markup, [b1, b2], (event.room_jid,
+            event.comment), gtk.MESSAGE_QUESTION)
 
     def on_event_added(self, event):
         if event.account != self.account:
@@ -3438,19 +3442,19 @@ class ChatControl(ChatControlBase):
         if event.jid != self.contact.jid:
             return
         if event.type_ == 'file-request':
-            self._got_file_request(event.parameters)
+            self._got_file_request(event.file_props)
         elif event.type_ == 'file-completed':
-            self._got_file_completed(event.parameters)
+            self._got_file_completed(event.file_props)
         elif event.type_ in ('file-error', 'file-stopped'):
             msg_err = ''
-            if event.parameters.error == -1:
+            if event.file_props.error == -1:
                 msg_err = _('Remote contact stopped transfer')
-            elif event.parameters.error == -6:
+            elif event.file_props.error == -6:
                 msg_err = _('Error opening file')
-            self._got_file_error(event.parameters, event.type_,
+            self._got_file_error(event.file_props, event.type_,
                 _('File transfer stopped'), msg_err)
         elif event.type_ in ('file-request-error', 'file-send-error'):
-            self._got_file_error(event.parameters, event.type_,
+            self._got_file_error(event.file_props, event.type_,
                 _('File transfer cancelled'),
                 _('Connection with peer cannot be established.'))
         elif event.type_ == 'gc-invitation':
@@ -3473,11 +3477,11 @@ class ChatControl(ChatControlBase):
             removed = False
             for ib_msg in self.info_bar_queue:
                 if ev.type_ == 'gc-invitation':
-                    if ev.parameters[0] == ib_msg[2][0]:
+                    if ev.room_jid == ib_msg[2][0]:
                         self.info_bar_queue.remove(ib_msg)
                         removed = True
                 else: # file-*
-                    if ib_msg[2] == ev.parameters:
+                    if ib_msg[2] == ev.file_props:
                         self.info_bar_queue.remove(ib_msg)
                         removed = True
                 if removed:

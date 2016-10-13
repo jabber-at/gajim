@@ -32,9 +32,7 @@
 ##
 
 
-import sys
 import re
-import copy
 import defs
 import gobject
 
@@ -345,9 +343,9 @@ class Config:
                     'keyid': [ opt_str, '', '', True ],
                     'gpg_sign_presence': [ opt_bool, True, _('If disabled, don\'t sign presences with GPG key, even if GPG is configured.') ],
                     'keyname': [ opt_str, '', '', True ],
-                    'enable_esessions': [opt_bool, True, _('Enable ESessions encryption for this account.')],
+                    'enable_esessions': [opt_bool, True, _('Enable ESessions encryption for this account.'), True],
                     'autonegotiate_esessions': [opt_bool, True, _('Should Gajim automatically start an encrypted session when possible?')],
-                    'connection_types': [ opt_str, 'tls ssl plain', _('Ordered list (space separated) of connection type to try. Can contain tls, ssl or plain')],
+                    'connection_types': [ opt_str, 'tls', _('Ordered list (space separated) of connection type to try. Can contain tls, ssl or plain')],
                     'tls_version': [ opt_str, '1.0', '' ],
                     'cipher_list': [ opt_str, 'HIGH:!aNULL:RC4-SHA', '' ],
                     'authentication_mechanisms': [ opt_str, '', _('List (space separated) of authentication mechanisms to try. Can contain ANONYMOUS, EXTERNAL, GSSAPI, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, DIGEST-MD5, PLAIN, X-MESSENGER-OAUTH2 or XEP-0078') ],

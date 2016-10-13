@@ -25,14 +25,16 @@ import gajim
 import nbxmpp
 import configpaths
 import jingle_xtls
+from common.jingle_ftstates import StateCandReceived, JingleTransportSocks5, \
+    StateCandSent, StateCandSentAndRecv, StateInitialized, StateTransfering,\
+    StateTransportReplace
+from common.jingle_transport import TransportType
 from jingle_content import contents, JingleContent
-from jingle_transport import *
 from common import helpers
-from common.socks5 import Socks5ReceiverClient, Socks5SenderClient
 from common.connection_handlers_events import FileRequestReceivedEvent
 import threading
 import logging
-from jingle_ftstates import *
+
 log = logging.getLogger('gajim.c.jingle_ft')
 
 STATE_NOT_STARTED = 0
@@ -128,6 +130,7 @@ class JingleFileTransfer(JingleContent):
             self.state = nextstate
 
     def __on_session_initiate(self, stanza, content, error, action):
+        log.debug("Jingle FT request received")
         gajim.nec.push_incoming_event(FileRequestReceivedEvent(None,
             conn=self.session.connection, stanza=stanza, jingle_content=content,
             FT_content=self))
