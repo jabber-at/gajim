@@ -44,6 +44,7 @@ import cell_renderer_image
 import dataforms_widget
 import nbxmpp
 
+from common import events
 from common import gajim
 from common import helpers
 from common import dataforms
@@ -52,7 +53,6 @@ from common import i18n
 
 from chat_control import ChatControl
 from chat_control import ChatControlBase
-from common.exceptions import GajimGeneralException
 
 from command_system.implementation.hosts import PrivateChatCommands
 from command_system.implementation.hosts import GroupChatCommands
@@ -1074,14 +1074,15 @@ class GroupchatControl(ChatControlBase):
                     correct_id=(obj.stanza.getID(), None))
         obj.needs_highlight = self.needs_visual_notification(obj.msgtxt)
 
-    def on_private_message(self, nick, msg, tim, xhtml, session, msg_id=None,
+    def on_private_message(self, nick, msg, tim, xhtml, session, msg_log_id=None,
     encrypted=False, displaymarking=None):
         # Do we have a queue?
         fjid = self.room_jid + '/' + nick
         no_queue = len(gajim.events.get_events(self.account, fjid)) == 0
 
-        event = gajim.events.create_event('pm', (msg, '', 'incoming', tim,
-            encrypted, '', msg_id, xhtml, session, None, displaymarking, False))
+        event = events.PmEvent(msg, '', 'incoming', tim, encrypted, '',
+            msg_log_id, xhtml=xhtml, session=session, form_node=None,
+            displaymarking=displaymarking, sent_forwarded=False)
         gajim.events.add_event(self.account, fjid, event)
 
         autopopup = gajim.config.get('autopopup')
@@ -1368,11 +1369,12 @@ class GroupchatControl(ChatControlBase):
                 # print if a control is open
                 obj.session.control.print_conversation(obj.msgtxt,
                     tim=obj.timestamp, xhtml=obj.xhtml, encrypted=obj.encrypted,
-                    displaymarking=obj.displaymarking)
+                    displaymarking=obj.displaymarking, correct_id=(obj.id_,
+                    obj.correct_id))
             else:
                 # otherwise pass it off to the control to be queued
                 self.on_private_message(nick, obj.msgtxt, obj.timestamp,
-                    obj.xhtml, self.session, msg_id=obj.msg_id,
+                    obj.xhtml, self.session, msg_log_id=obj.msg_log_id,
                     encrypted=obj.encrypted, displaymarking=obj.displaymarking)
 
     def _nec_ping_reply(self, obj):
@@ -2020,7 +2022,8 @@ class GroupchatControl(ChatControlBase):
             gajim.nec.push_outgoing_event(GcMessageOutgoingEvent(None,
                 account=self.account, jid=self.room_jid, message=message,
                 xhtml=xhtml, label=label, callback=_cb,
-                callback_args=[_cb] + [message], correction_msg=correction_msg))
+                callback_args=[_cb] + [message], correction_msg=correction_msg,
+                automatic_message=False))
             self.msg_textview.get_buffer().set_text('')
             self.msg_textview.grab_focus()
 
@@ -2216,7 +2219,7 @@ class GroupchatControl(ChatControlBase):
 
     def _on_change_nick_menuitem_activate(self, widget):
         if 'change_nick_dialog' in gajim.interface.instances:
-            gajim.interface.instances['change_nick_dialog'].present()
+            gajim.interface.instances['change_nick_dialog'].dialog.present()
         else:
             title = _('Changing Nickname')
             prompt = _('Please specify the new nickname you want to use:')

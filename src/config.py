@@ -34,7 +34,7 @@
 import gtk
 import pango
 import gobject
-import os, sys
+import os
 import common.config
 import common.sleepy
 from common.i18n import Q_
@@ -149,19 +149,19 @@ class PreferencesWindow:
         # user themes
         if os.path.isdir(gajim.MY_EMOTS_PATH):
             emoticons_list += os.listdir(gajim.MY_EMOTS_PATH)
+        emoticons_list.sort()
         renderer_text = gtk.CellRendererText()
         emoticons_combobox.pack_start(renderer_text, True)
         emoticons_combobox.add_attribute(renderer_text, 'text', 0)
         model = gtk.ListStore(str)
         emoticons_combobox.set_model(model)
-        l = []
+        l = [_('Disabled')]
         for dir_ in emoticons_list:
             if not os.path.isdir(os.path.join(gajim.DATA_DIR, 'emoticons', dir_)) \
             and not os.path.isdir(os.path.join(gajim.MY_EMOTS_PATH, dir_)) :
                 continue
             if dir_ != '.svn':
                 l.append(dir_)
-        l.append(_('Disabled'))
         for i in xrange(len(l)):
             model.append([l[i]])
             if gajim.config.get('emoticons_theme') == l[i]:
@@ -3382,11 +3382,12 @@ class ManageBookmarksWindow:
         # Fill in the data for childs
         self.title_entry.set_text(model[iter_][1])
         room_jid = model[iter_][2].decode('utf-8')
-        (room, server) = room_jid.split('@')
-        self.room_entry.handler_block(self.room_entry_changed_id)
-        self.room_entry.set_text(room)
-        self.room_entry.handler_unblock(self.room_entry_changed_id)
-        self.server_entry.set_text(server)
+        if '@' in room_jid:
+            (room, server) = room_jid.split('@')
+            self.room_entry.handler_block(self.room_entry_changed_id)
+            self.room_entry.set_text(room)
+            self.room_entry.handler_unblock(self.room_entry_changed_id)
+            self.server_entry.set_text(server)
 
         self.autojoin_checkbutton.set_active(model[iter_][3])
         self.minimize_checkbutton.set_active(model[iter_][4])

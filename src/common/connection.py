@@ -42,6 +42,25 @@ import locale
 import hmac
 import json
 
+import common
+from common.connection_handlers import BLOCKING_ARRIVED, PRIVACY_ARRIVED, AGENT_REMOVED, \
+    ConnectionHandlers, DELIMITER_ARRIVED, METACONTACTS_ARRIVED, ROSTER_ARRIVED
+from common.connection_handlers_events import InformationEvent, \
+    UniqueRoomIdNotSupportedEvent, UniqueRoomIdSupportedEvent, GatewayPromptReceivedEvent, \
+    NewAccountNotConnectedEvent, StanzaMessageOutgoingEvent, OurShowEvent, SignedInEvent, \
+    PrivacyListRemovedEvent, PingReplyEvent, PingErrorEvent, PingSentEvent, \
+    AnonymousAuthEvent, ConnectionLostEvent, ConnectionTypeEvent, SSLErrorEvent, \
+    FingerprintErrorEvent, InsecureSSLConnectionEvent, ClientCertPassphraseEvent, \
+    PlainConnectionEvent, PrivacyListReceivedEvent, PrivacyListActiveDefaultEvent, \
+    PrivacyListsReceivedEvent, RegisterAgentInfoReceivedEvent, NewAccountConnectedEvent, \
+    AccountCreatedEvent, AccountNotCreatedEvent, BeforeChangeShowEvent, StanzaSentEvent, \
+    StanzaReceivedEvent, MessageNotSentEvent, GPGTrustKeyEvent, BadGPGPassphraseEvent, \
+    GcStanzaMessageOutgoingEvent
+from common.connection_handlers_events import InsecurePasswordEvent, MessageSentEvent, \
+    NonAnonymousServerErrorEvent, Oauth2CredentialsRequiredEvent, PasswordRequiredEvent, \
+    RosterReceivedEvent, SearchResultReceivedEvent
+import common.ged as ged
+
 try:
     randomsource = random.SystemRandom()
 except Exception:
@@ -59,7 +78,6 @@ from common import gpg
 from common import passwords
 from common import exceptions
 from common import check_X509
-from connection_handlers import *
 
 if gajim.HAVE_PYOPENSSL:
     import OpenSSL.crypto
@@ -478,8 +496,8 @@ class CommonConnection:
             # chatstates - if peer supports xep85, send chatstates
             # please note that the only valid tag inside a message containing a
             # <body> tag is the active event
-            if chatstate and contact and contact.supports(NS_CHATSTATES):
-                msg_iq.setTag(chatstate, namespace=NS_CHATSTATES)
+            if chatstate and contact and contact.supports(nbxmpp.NS_CHATSTATES):
+                msg_iq.setTag(chatstate, namespace=nbxmpp.NS_CHATSTATES)
 
             # XEP-0184
             if msgtxt and gajim.config.get_per('accounts', self.name,
@@ -521,9 +539,6 @@ class CommonConnection:
                 log_msg = msg
                 if original_message is not None:
                     log_msg = original_message
-                if subject:
-                    log_msg = _('Subject: %(subject)s\n%(message)s') % \
-                    {'subject': subject, 'message': log_msg}
                 if log_msg:
                     if type_ == 'chat':
                         kind = 'chat_msg_sent'
@@ -533,7 +548,7 @@ class CommonConnection:
                         if xhtml and gajim.config.get('log_xhtml_messages'):
                             log_msg = '<body xmlns="%s">%s</body>' % (
                                 nbxmpp.NS_XHTML, xhtml)
-                        gajim.logger.write(kind, jid, log_msg)
+                        gajim.logger.write(kind, jid, log_msg, subject=subject)
                     except exceptions.PysqliteOperationalError, e:
                         self.dispatch('DB_ERROR', (_('Disk Write Error'),
                             str(e)))
@@ -816,6 +831,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             self._nec_message_outgoing)
         gajim.ged.register_event_handler('gc-message-outgoing', ged.OUT_CORE,
             self._nec_gc_message_outgoing)
+        gajim.ged.register_event_handler('gc-stanza-message-outgoing', ged.OUT_CORE,
+            self._nec_gc_stanza_message_outgoing)
         gajim.ged.register_event_handler('stanza-message-outgoing',
             ged.OUT_CORE, self._nec_stanza_message_outgoing)
     # END __init__
@@ -832,6 +849,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             self._nec_message_outgoing)
         gajim.ged.remove_event_handler('gc-message-outgoing', ged.OUT_CORE,
             self._nec_gc_message_outgoing)
+        gajim.ged.remove_event_handler('gc-stanza-message-outgoing', ged.OUT_CORE,
+            self._nec_gc_stanza_message_outgoing)
         gajim.ged.remove_event_handler('stanza-message-outgoing', ged.OUT_CORE,
             self._nec_stanza_message_outgoing)
 
@@ -930,13 +949,12 @@ class Connection(CommonConnection, ConnectionHandlers):
                     gajim.status_before_autoaway[self.name] = ''
                     self.old_show = 'online'
                 # this check has moved from _reconnect method
-                # do exponential backoff until 15 minutes,
-                # then small linear increase
+                # do exponential backoff until less than 5 minutes
                 if self.retrycount < 2 or self.last_time_to_reconnect is None:
                     self.last_time_to_reconnect = 5
-                if self.last_time_to_reconnect < 800:
+                    self.last_time_to_reconnect += randomsource.randint(0, 5)
+                if self.last_time_to_reconnect < 200:
                     self.last_time_to_reconnect *= 1.5
-                self.last_time_to_reconnect += randomsource.randint(0, 5)
                 self.time_to_reconnect = int(self.last_time_to_reconnect)
                 log.info("Reconnect to %s in %ss", self.name, self.time_to_reconnect)
                 gajim.idlequeue.set_alarm(self._reconnect_alarm,
@@ -1460,13 +1478,14 @@ class Connection(CommonConnection, ConnectionHandlers):
             if saved_fingerprint:
                 # Check sha1 fingerprint
                 if fingerprint != saved_fingerprint:
-                    gajim.nec.push_incoming_event(FingerprintErrorEvent(None,
-                        conn=self, certificate=con.Connection.ssl_certificate,
-                        new_fingerprint=fingerprint))
-                    return True
-            else:
-                gajim.config.set_per('accounts', self.name,
-                    'ssl_fingerprint_sha1', fingerprint)
+                    if not check_X509.check_certificate(cert, hostname):
+                        gajim.nec.push_incoming_event(FingerprintErrorEvent(
+                            None, conn=self,
+                            certificate=con.Connection.ssl_certificate,
+                            new_fingerprint=fingerprint))
+                        return True
+            gajim.config.set_per('accounts', self.name, 'ssl_fingerprint_sha1',
+                fingerprint)
             if not check_X509.check_certificate(con.Connection.ssl_certificate,
             hostname) and '100' not in gajim.config.get_per('accounts',
             self.name, 'ignore_ssl_errors').split():
@@ -2118,17 +2137,42 @@ class Connection(CommonConnection, ConnectionHandlers):
         if obj.account != self.name:
             return
 
+        # parameters of this function are packet into _cb_parameters for later usage in _nec_stanza_message_outgoing's cb()
         def cb(jid, msg, keyID, forward_from, session, original_message,
         subject, type_, msg_iq, xhtml):
             if isinstance(msg_iq, list):
                 for iq in msg_iq:
                     gajim.nec.push_incoming_event(StanzaMessageOutgoingEvent(
-                        None, conn=self, msg_iq=iq, now=obj.now))
+                        None, conn=self, msg_iq=iq, now=obj.now, automatic_message=obj.automatic_message,
+                        _cb_parameters={"jid":jid, "msg":msg, "keyID":keyID, "forward_from":forward_from,
+                        "session":session, "original_message":original_message, "subject":subject, "type_":type_,
+                        "msg_iq":msg_iq, "xhtml":xhtml, "obj":obj}))
             else:
                 gajim.nec.push_incoming_event(StanzaMessageOutgoingEvent(None,
-                    conn=self, msg_iq=msg_iq, now=obj.now))
+                    conn=self, msg_iq=msg_iq, now=obj.now, automatic_message=obj.automatic_message,
+                    _cb_parameters={"jid":jid, "msg":msg, "keyID":keyID, "forward_from":forward_from,
+                    "session":session, "original_message":original_message, "subject":subject, "type_":type_,
+                    "msg_iq":msg_iq, "xhtml":xhtml, "obj":obj}))
+            
+        self._prepare_message(obj.jid, obj.message, obj.keyID, type_=obj.type_,
+            subject=obj.subject, chatstate=obj.chatstate, msg_id=obj.msg_id,
+            resource=obj.resource, user_nick=obj.user_nick, xhtml=obj.xhtml,
+            label=obj.label, session=obj.session, forward_from=obj.forward_from,
+            form_node=obj.form_node, original_message=obj.original_message,
+            delayed=obj.delayed, attention=obj.attention,
+            correction_msg=obj.correction_msg, callback=cb)
+
+    def _nec_stanza_message_outgoing(self, obj):
+        if obj.conn.name != self.name:
+            return
+        obj.msg_id = self.connection.send(obj.msg_iq, now=obj.now)
+        
+        # obj in this function is the obj as seen in _nec_message_outgoing()
+        def cb(obj, jid, msg, keyID, forward_from, session, original_message,
+        subject, type_, msg_iq, xhtml, msg_id):
             gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
-                jid=jid, message=msg, keyID=keyID, chatstate=obj.chatstate))
+                jid=jid, message=msg, keyID=keyID, chatstate=obj.chatstate,
+                automatic_message=obj.automatic_message, msg_id=msg_id))
             if obj.callback:
                 obj.callback(msg_iq, *obj.callback_args)
 
@@ -2143,19 +2187,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             else:
                 self.log_message(jid, msg, forward_from, session,
                     original_message, subject, type_, xhtml)
-
-        self._prepare_message(obj.jid, obj.message, obj.keyID, type_=obj.type_,
-            subject=obj.subject, chatstate=obj.chatstate, msg_id=obj.msg_id,
-            resource=obj.resource, user_nick=obj.user_nick, xhtml=obj.xhtml,
-            label=obj.label, session=obj.session, forward_from=obj.forward_from,
-            form_node=obj.form_node, original_message=obj.original_message,
-            delayed=obj.delayed, attention=obj.attention,
-            correction_msg=obj.correction_msg, callback=cb)
-
-    def _nec_stanza_message_outgoing(self, obj):
-        if obj.conn.name != self.name:
-            return
-        obj.msg_id = self.connection.send(obj.msg_iq, now=obj.now)
+        
+        cb(msg_id=obj.msg_id, **obj._cb_parameters)
 
     def send_contacts(self, contacts, fjid, type_='message'):
         """
@@ -2704,15 +2737,16 @@ class Connection(CommonConnection, ConnectionHandlers):
             if obj.correction_msg.getTag('replace'):
                 obj.correction_msg.delChild('replace')
             obj.correction_msg.setTag('replace', attrs={'id': id_},
-                namespace=nbxmpp.NS_CORRECT)
+                                      namespace=nbxmpp.NS_CORRECT)
             id2 = self.connection.getAnID()
             obj.correction_msg.setID(id2)
             obj.correction_msg.setBody(obj.message)
             if obj.xhtml:
                 obj.correction_msg.setXHTML(xhtml)
-            self.connection.send(obj.correction_msg)
-            gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
-                jid=obj.jid, message=obj.message, keyID=None, chatstate=None))
+            gajim.nec.push_incoming_event(GcStanzaMessageOutgoingEvent(
+                None, conn=self, automatic_message=obj.automatic_message,
+                jid=obj.jid, message=obj.message,
+                correction_msg=obj.correction_msg))
             if obj.callback:
                 obj.callback(obj.correction_msg, obj.message)
             return
@@ -2720,14 +2754,27 @@ class Connection(CommonConnection, ConnectionHandlers):
             from common.rst_xhtml_generator import create_xhtml
             obj.xhtml = create_xhtml(obj.message)
         msg_iq = nbxmpp.Message(obj.jid, obj.message, typ='groupchat',
-            xhtml=obj.xhtml)
+                                xhtml=obj.xhtml)
         if obj.label is not None:
-            msg_iq.addChild(node=label)
-        self.connection.send(msg_iq)
-        gajim.nec.push_incoming_event(MessageSentEvent(None, conn=self,
-            jid=obj.jid, message=obj.message, keyID=None, chatstate=None))
+            msg_iq.addChild(node=obj.label)
+        gajim.nec.push_incoming_event(GcStanzaMessageOutgoingEvent(
+            None, conn=self, msg_iq=msg_iq,
+            automatic_message=obj.automatic_message,
+            jid=obj.jid, message=obj.message, correction_msg=None))
         if obj.callback:
             obj.callback(msg_iq, obj.message)
+
+    def _nec_gc_stanza_message_outgoing(self, obj):
+        if obj.conn.name != self.name:
+            return
+        if obj.correction_msg:
+            obj.msg_id = self.connection.send(obj.correction_msg)
+        else:
+            obj.msg_id = self.connection.send(obj.msg_iq)
+        gajim.nec.push_incoming_event(MessageSentEvent(
+            None, conn=self, jid=obj.jid, message=obj.message, keyID=None,
+            chatstate=None, automatic_message=obj.automatic_message,
+            msg_id=obj.msg_id))
 
     def send_gc_subject(self, jid, subject):
         if not gajim.account_is_connected(self.name):

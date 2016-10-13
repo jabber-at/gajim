@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-  gajimversion="0.16.5"
+  gajimversion="0.16.6"
   if [ -d ".hg" ]; then
     node=$(hg  tip --template "{node}")
     hgversion="-${node:0:12}"
@@ -17,7 +17,7 @@
   && ls -1 data/gajim.desktop.in.in data/gajim-remote.desktop.in.in \
   src/*.py src/common/*.py src/command_system/*.py src/command_system/implementation/*.py src/common/zeroconf/*.py src/plugins/*.py | grep -v ipython_view.py >> \
   po/POTFILES.in \
-  && echo -e "data/gajim.desktop.in\nsrc/ipython_view.py" > po/POTFILES.skip  || exit 1
+  && echo -e "data/gajim.desktop.in\ndata/gajim-remote.desktop.in\nsrc/ipython_view.py" > po/POTFILES.skip  || exit 1
   if [ $(find plugins/ -name '*.py' | wc -l) -gt 0 ];then
     ls -1 plugins/*/*.py plugins/*/*.ui >> po/POTFILES.skip
   fi
@@ -30,6 +30,10 @@
   which glibtoolize >/dev/null 2>&1 && LIBTOOLIZE="glibtoolize" || LIBTOOLIZE="libtoolize"
 
   mkdir -p config
+
+  if [ "$NO_AUTOTOOLS_RUN" ]; then
+    exit 0
+  fi
 
   intltoolize --force --automake \
   && aclocal -I ./m4 \

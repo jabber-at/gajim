@@ -448,12 +448,12 @@ class Logger:
         sql = 'DELETE FROM unread_messages WHERE message_id IN (%s)' % ids
         self.simple_commit(sql)
 
-    def set_shown_unread_msgs(self, msg_id):
+    def set_shown_unread_msgs(self, msg_log_id):
         """
         Mark unread message as shown un GUI
         """
         sql = 'UPDATE unread_messages SET shown = 1 where message_id = %s' % \
-                msg_id
+                msg_log_id
         self.simple_commit(sql)
 
     def reset_shown_unread_messages(self):
@@ -471,11 +471,11 @@ class Logger:
         try:
             self.cur.execute(
                     'SELECT message_id, shown from unread_messages')
-            results = self.cur.fetchall()
+            unread_results = self.cur.fetchall()
         except Exception:
             pass
-        for message in results:
-            msg_id = message[0]
+        for message in unread_results:
+            msg_log_id = message[0]
             shown = message[1]
             # here we get infos for that message, and related jid from jids table
             # do NOT change order of SELECTed things, unless you change function(s)
@@ -485,12 +485,12 @@ class Logger:
                     jids.jid
                     FROM logs, jids
                     WHERE logs.log_line_id = %d AND logs.jid_id = jids.jid_id
-                    ''' % msg_id
+                    ''' % msg_log_id
                     )
             results = self.cur.fetchall()
             if len(results) == 0:
                 # Log line is no more in logs table. remove it from unread_messages
-                self.set_read_messages([msg_id])
+                self.set_read_messages([msg_log_id])
                 continue
             all_messages.append(results[0] + (shown,))
         return all_messages
@@ -585,8 +585,8 @@ class Logger:
         Accept how many rows to restore and when to time them out (in minutes)
         (mark them as too old) and number of messages that are in queue and are
         already logged but pending to be viewed, returns a list of tupples
-        containg time, kind, message, list with empty tupple if nothing found to
-        meet our demands
+        containg time, kind, message, sibject list with empty tupple if nothing
+        found to meet our demands
         """
         try:
             self.get_jid_id(jid)
@@ -601,7 +601,7 @@ class Logger:
         # 3 - 8 (we avoid the last 2 lines but we still return 5 asked)
         try:
             self.cur.execute('''
-                SELECT time, kind, message FROM logs
+                SELECT time, kind, message, subject FROM logs
                 WHERE (%s) AND kind IN (%d, %d, %d, %d, %d) AND time > %d
                 ORDER BY time DESC LIMIT %d OFFSET %d
                 ''' % (where_sql, constants.KIND_SINGLE_MSG_RECV,

@@ -1,1 +1,1 @@
-define([AC_PACKAGE_VERSION], [0.16.5])
+define([AC_PACKAGE_VERSION], [0.16.6])

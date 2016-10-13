@@ -38,6 +38,7 @@ from common import gajim
 import jingle_xtls
 if jingle_xtls.PYOPENSSL_PRESENT:
     import OpenSSL
+    from OpenSSL import SSL
 import logging
 log = logging.getLogger('gajim.c.socks5')
 MAX_BUFF_LEN = 65536
@@ -82,6 +83,7 @@ class SocksQueue:
         Start waiting for incomming connections on (host, port) and do a socks5
         authentication using sid for generated SHA
         """
+        log.debug('Start listening for socks5 connection')
         sid = file_props.sid
         self.sha_handlers[sha_str] = (sha_handler, sid)
         if self.listener is None or self.listener.connections == []:
@@ -131,11 +133,19 @@ class SocksQueue:
             else:
                 fp = fingerprint
             if receiving:
+                if 'cid' in streamhost: # jingle
+                    log.debug('Trying to connect as receiver to cid ' + streamhost['cid'])
+                else: # SI
+                    log.debug('Trying to connect as receiver to host ' + streamhost['host'])
                 file_props.type_ = 'r'
                 socks5obj = Socks5ReceiverClient(self.idlequeue, streamhost,
                     sid, file_props, fingerprint=fp)
                 self.add_sockobj(account, socks5obj)
             else:
+                if 'cid' in streamhost: #jingle
+                    log.debug('Trying to connect as sender to cid ' + streamhost['cid'])
+                else: # SI
+                    log.debug('Trying to connect as sender to host ' + streamhost['host'])
                 if file_props.sha_str:
                     idx = file_props.sha_str
                 else:
@@ -162,6 +172,10 @@ class SocksQueue:
         Called when there is a host connected to one of the senders's
         streamhosts. Stop other attempts for connections
         """
+        if 'cid' in streamhost: # jingle
+            log.debug('Connected to cid ' + streamhost['cid'])
+        else: # SI
+            log.debug('Connected to host ' + streamhost['host'])
         for host in file_props.streamhosts:
             if host != streamhost and 'idx' in host:
                 if host['state'] == 1:
@@ -223,6 +237,10 @@ class SocksQueue:
         """
         Called when we loose connection during transfer
         """
+        if 'cid' in streamhost: # jingle
+            log.debug('Connection refused to cid ' + streamhost['cid'])
+        else: # SI
+            log.debug('Connection refused to host ' + streamhost['host'])
         if file_props is None:
             return
         streamhost['state'] = -1
@@ -649,7 +667,6 @@ class Socks5(object):
     def write_next(self):
         if self.remaining_buff != '':
             buff = self.remaining_buff
-            self.remaining_buff = ''
         else:
             try:
                 self.open_file_for_reading()

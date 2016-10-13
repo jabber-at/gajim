@@ -24,6 +24,7 @@ import os
 from time import (localtime, time as time_time)
 from calendar import timegm
 import hmac
+import hashlib
 
 from common import atom
 from common import nec
@@ -95,7 +96,11 @@ class HelperEvent:
             self.gc_control = minimized.get(self.jid)
 
     def _generate_timestamp(self, tag):
-        tim = helpers.datetime_tuple(tag)
+        try:
+            tim = helpers.datetime_tuple(tag)
+        except Exception:
+            log.error('wrong timestamp, ignoring it: ' + tag)
+            tim = localtime()
         self.timestamp = localtime(timegm(tim))
 
     def get_chatstate(self):
@@ -1028,13 +1033,17 @@ class MamMessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
         if not self.stanza:
             return
         account = self.conn.name
+        self.msg_ = self.stanza.getTag('message')
+        # use timestamp of archived message, if available and archive timestamp otherwise
         delay = self.stanza.getTag('delay', namespace=nbxmpp.NS_DELAY2)
+        delay2 = self.msg_.getTag('delay', namespace=nbxmpp.NS_DELAY2)
+        if delay2:
+            delay = delay2
         if not delay:
             return
         tim = delay.getAttr('stamp')
         tim = helpers.datetime_tuple(tim)
         self.tim = localtime(timegm(tim))
-        self.msg_ = self.stanza.getTag('message')
         to_ = self.msg_.getAttr('to')
         if to_:
             to_ = gajim.get_jid_without_resource(to_)
@@ -1150,6 +1159,7 @@ class MessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
             if forward_tag:
                 msg = forward_tag.getTag('message')
                 self.stanza = nbxmpp.Message(node=msg)
+                self.get_id()
                 if carbon_marker.getName() == 'sent':
                     to = self.stanza.getTo()
                     frm = self.stanza.getFrom()
@@ -1243,6 +1253,8 @@ class MessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
                 feature = self.stanza.getTag(name='feature',
                     namespace=nbxmpp.NS_FEATURE)
                 form = nbxmpp.DataForm(node=feature.getTag('x'))
+                if not form:
+                    return
 
                 if form['FORM_TYPE'] == 'urn:xmpp:ssn':
                     self.session.handle_negotiation(form)
@@ -1391,10 +1403,12 @@ class DecryptedMessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
         self.encrypted = self.msg_obj.encrypted
         self.forwarded = self.msg_obj.forwarded
         self.sent = self.msg_obj.sent
+        self.conn = self.msg_obj.conn
         self.popup = False
-        self.msg_id = None # id in log database
+        self.msg_log_id = None # id in log database
         self.attention = False # XEP-0224
         self.correct_id = None # XEP-0308
+        self.msghash = None
 
         self.receipt_request_tag = self.stanza.getTag('request',
             namespace=nbxmpp.NS_RECEIPTS)
@@ -1445,6 +1459,21 @@ class DecryptedMessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
         if replace:
             self.correct_id = replace.getAttr('id')
 
+        # ignore message duplicates
+        if self.msgtxt and self.id_ and self.jid:
+            self.msghash = hashlib.sha256("%s|%s|%s" % (
+                hashlib.sha256(str(self.msgtxt)).hexdigest(),
+                hashlib.sha256(str(self.id_)).hexdigest(),
+                hashlib.sha256(str(self.jid)).hexdigest())).digest()
+            if self.msghash in self.conn.received_message_hashes:
+                log.info("Ignoring duplicated message from '%s' with id '%s'" % (str(self.jid), str(self.id_)))
+                return False
+            else:
+                log.debug("subhashes: msgtxt, id_, jid = ('%s', '%s', '%s')" % (hashlib.sha256(str(self.msgtxt)).hexdigest(), hashlib.sha256(str(self.id_)).hexdigest(), hashlib.sha256(str(self.jid)).hexdigest()))
+                self.conn.received_message_hashes.append(self.msghash)
+                # only record the last 20000 hashes (should be about 1MB [32 bytes per hash]
+                # and about 24 hours if you receive a message every 5 seconds)
+                self.conn.received_message_hashes = self.conn.received_message_hashes[-20000:]
         return True
 
 class ChatstateReceivedEvent(nec.NetworkIncomingEvent):
@@ -1581,13 +1610,29 @@ class MessageSentEvent(nec.NetworkIncomingEvent):
     name = 'message-sent'
     base_network_events = []
 
+    def generate(self):
+        if not self.automatic_message:
+            self.conn.sent_message_ids.append(self.msg_id)
+            # only record the last 20000 message ids (should be about 1MB [36 byte per uuid]
+            # and about 24 hours if you send out a message every 5 seconds)
+            self.conn.sent_message_ids = self.conn.sent_message_ids[-20000:]
+        return True
+
 class MessageNotSentEvent(nec.NetworkIncomingEvent):
     name = 'message-not-sent'
     base_network_events = []
 
-class MessageErrorEvent(nec.NetworkIncomingEvent):
+class MessageErrorEvent(nec.NetworkIncomingEvent, HelperEvent):
     name = 'message-error'
     base_network_events = []
+
+    def generate(self):
+        self.get_id()
+        #only alert for errors of explicitly sent messages (see https://trac.gajim.org/ticket/8222)
+        if self.id_ in self.conn.sent_message_ids:
+            self.conn.sent_message_ids.remove(self.id_)
+            return True
+        return False
 
 class AnonymousAuthEvent(nec.NetworkIncomingEvent):
     name = 'anonymous-auth'
@@ -2275,6 +2320,15 @@ class FileRequestErrorEvent(nec.NetworkIncomingEvent):
         self.jid = gajim.get_jid_without_resource(self.jid)
         return True
 
+class FileTransferCompletedEvent(nec.NetworkIncomingEvent):
+    name = 'file-transfer-completed'
+    base_network_events = []
+
+    def generate(self):
+        jid = unicode(self.file_props.receiver)
+        self.jid = gajim.get_jid_without_resource(jid)
+        return True
+
 class GatewayPromptReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
     name = 'gateway-prompt-received'
     base_network_events = []
@@ -2314,6 +2368,9 @@ class NotificationEvent(nec.NetworkIncomingEvent):
                 self.control_focused = True
 
     def handle_incoming_msg_event(self, msg_obj):
+        # don't alert for carbon copied messages from ourselves
+        if msg_obj.sent:
+            return
         if not msg_obj.msgtxt:
             return
         self.jid = msg_obj.jid
@@ -2599,12 +2656,20 @@ class MessageOutgoingEvent(nec.NetworkOutgoingEvent):
         self.control = None
         self.attention = False
         self.correction_msg = None
+        self.automatic_message = True
 
     def generate(self):
         return True
 
 class StanzaMessageOutgoingEvent(nec.NetworkOutgoingEvent):
     name='stanza-message-outgoing'
+    base_network_events = []
+
+    def generate(self):
+        return True
+
+class GcStanzaMessageOutgoingEvent(nec.NetworkOutgoingEvent):
+    name='gc-stanza-message-outgoing'
     base_network_events = []
 
     def generate(self):
@@ -2623,6 +2688,7 @@ class GcMessageOutgoingEvent(nec.NetworkOutgoingEvent):
         self.is_loggable = True
         self.control = None
         self.correction_msg = None
+        self.automatic_message = True
 
     def generate(self):
         return True

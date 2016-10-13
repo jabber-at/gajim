@@ -22,16 +22,17 @@
 ## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 ##
 
-from gajim import HAVE_GPG
+from gajim import HAVE_GPG, GPG_BINARY
 import os
+import locale
 
 if HAVE_GPG:
     import gnupg
 
     class GnuPG(gnupg.GPG):
         def __init__(self, use_agent=False):
-            gnupg.GPG.__init__(self)
-            self.encoding = 'utf-8'
+            gnupg.GPG.__init__(self, gpgbinary=GPG_BINARY)
+            self.encoding = locale.getpreferredencoding()
             self.decode_errors = 'replace'
             self.passphrase = None
             self.use_agent = use_agent
