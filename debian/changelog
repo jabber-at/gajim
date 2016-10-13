@@ -1,6 +1,12 @@
+gajim (0.16.5-0.1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Mathias Ertl <mati@jabber.at>  Mon, 11 Jan 2016 20:14:09 +0100
+
 gajim (0.16.4-0.2) unstable; urgency=low
 
-  * Increase minimu python-nbxmpp version to 0.5.3,
+  * Increase minimum python-nbxmpp version to 0.5.3,
 
  -- Mathias Ertl <mati@jabber.at>  Thu, 03 Dec 2015 14:59:35 +0100
 
