@@ -108,7 +108,6 @@ src/common/file_props.py
 src/common/fuzzyclock.py
 src/common/gajim.py
 src/common/ged.py
-src/common/gnupg.py
 src/common/gpg.py
 src/common/helpers.py
 src/common/i18n.py

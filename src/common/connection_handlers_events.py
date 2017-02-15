@@ -208,7 +208,11 @@ class TimeResultReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
         tzo = qp.getTag('tzo').getData()
         if tzo.lower() == 'z':
             tzo = '0:0'
-        tzoh, tzom = tzo.split(':')
+        try:
+            tzoh, tzom = tzo.split(':')
+        except Exception, e:
+            # wrong tzo
+            return
         utc_time = qp.getTag('utc').getData()
         ZERO = datetime.timedelta(0)
         class UTC(datetime.tzinfo):
@@ -504,29 +508,41 @@ class PrivateStorageReceivedEvent(nec.NetworkIncomingEvent):
 class BookmarksHelper:
     def parse_bookmarks(self):
         self.bookmarks = []
+        NS_GAJIM_BM = 'xmpp:gajim.org/bookmarks'
         confs = self.storage_node.getTags('conference')
         for conf in confs:
             autojoin_val = conf.getAttr('autojoin')
-            if autojoin_val is None: # not there (it's optional)
+            if not autojoin_val:  # not there (it's optional)
                 autojoin_val = False
-            minimize_val = conf.getAttr('minimize')
-            if minimize_val is None: # not there (it's optional)
-                minimize_val = False
-            print_status = conf.getTagData('print_status')
-            if not print_status:
-                print_status = conf.getTagData('show_status')
+            minimize_val = conf.getTag('minimize', namespace=NS_GAJIM_BM)
+            if not minimize_val:  # not there, try old Gajim behaviour
+                minimize_val = conf.getAttr('minimize')
+                if not minimize_val:  # not there (it's optional)
+                    minimize_val = False
+            else:
+                minimize_val = minimize_val.getData()
+
+            print_status = conf.getTag('print_status', namespace=NS_GAJIM_BM)
+            if not print_status:  # not there, try old Gajim behaviour
+                print_status = conf.getTagData('print_status')
+                if not print_status:  # not there, try old Gajim behaviour
+                    print_status = conf.getTagData('show_status')
+            else:
+                print_status = print_status.getData()
+
             try:
                 jid = helpers.parse_jid(conf.getAttr('jid'))
             except helpers.InvalidFormat:
-                log.warn('Invalid JID: %s, ignoring it' % conf.getAttr('jid'))
+                log.warning('Invalid JID: %s, ignoring it'
+                            % conf.getAttr('jid'))
                 continue
             bm = {'name': conf.getAttr('name'),
-                'jid': jid,
-                'autojoin': autojoin_val,
-                'minimize': minimize_val,
-                'password': conf.getTagData('password'),
-                'nick': conf.getTagData('nick'),
-                'print_status': print_status}
+                  'jid': jid,
+                  'autojoin': autojoin_val,
+                  'minimize': minimize_val,
+                  'password': conf.getTagData('password'),
+                  'nick': conf.getTagData('nick'),
+                  'print_status': print_status}
 
 
             bm_jids = [b['jid'] for b in self.bookmarks]
@@ -1256,6 +1272,9 @@ class MessageReceivedEvent(nec.NetworkIncomingEvent, HelperEvent):
                 if not form:
                     return
 
+                if not form.getField('FORM_TYPE'):
+                    return
+                
                 if form['FORM_TYPE'] == 'urn:xmpp:ssn':
                     self.session.handle_negotiation(form)
                 else:
@@ -1637,6 +1656,20 @@ class MessageErrorEvent(nec.NetworkIncomingEvent, HelperEvent):
 class AnonymousAuthEvent(nec.NetworkIncomingEvent):
     name = 'anonymous-auth'
     base_network_events = []
+
+class JingleSessionInitiateSendingEvent(nec.NetworkOutgoingEvent, HelperEvent):
+    name = 'jingle-session-initiate-sending'
+    base_network_events = []
+
+    def init(self):
+        self.jingle_content = None
+        self.FT_content = None
+
+    def generate(self):
+        self.get_id()
+        self.fjid = self.conn._ft_get_from(self.stanza)
+        self.jid = gajim.get_jid_without_resource(self.fjid)
+        return True
 
 class JingleRequestReceivedEvent(nec.NetworkIncomingEvent):
     name = 'jingle-request-received'

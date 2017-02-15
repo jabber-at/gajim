@@ -2,7 +2,7 @@
 ## src/dialogs.py
 ##
 ## Copyright (C) 2003-2005 Vincent Hanquez <tab AT snarc.org>
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005 Alex Mauer <hawke AT hawkesnest.net>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Travis Shirk <travis AT pobox.com>
@@ -5405,13 +5405,13 @@ class CertificatDialog(InformationDialog):
             _('Certificate for account %s') % account, _('''<b>Issued to:</b>
 Common Name (CN): %(scn)s
 Organization (O): %(sorg)s
-Organizationl Unit (OU): %(sou)s
+Organizational Unit (OU): %(sou)s
 Serial Number: %(sn)s
 
 <b>Issued by:</b>
 Common Name (CN): %(icn)s
 Organization (O): %(iorg)s
-Organizationl Unit (OU): %(iou)s
+Organizational Unit (OU): %(iou)s
 
 <b>Validity:</b>
 Issued on: %(io)s

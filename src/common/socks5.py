@@ -3,7 +3,7 @@
 ##
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##
@@ -897,8 +897,8 @@ class Socks5(object):
         """
         try:
             buff = self._recv()
-        except (SSL.WantReadError, SSL.WantWriteError,
-        SSL.WantX509LookupError), e:
+        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.WantWriteError,
+        OpenSSL.SSL.WantX509LookupError) as e:
             log.info("SSL rehandshake request : " + repr(e))
             raise e
         try:

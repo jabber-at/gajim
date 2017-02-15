@@ -5,7 +5,7 @@
 ## Copyright (C) 2005-2006 Alex Mauer <hawke AT hawkesnest.net>
 ##                         Travis Shirk <travis AT pobox.com>
 ## Copyright (C) 2005-2007 Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2005-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2005-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006 Dimitur Kirov <dkirov AT gmail.com>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
@@ -217,6 +217,11 @@ class ConversationTextview(gobject.GObject):
 
         # It's True when we scroll in the code, so we can detect scroll from user
         self.auto_scrolling = False
+
+        # Holds the last Nickname and Kind
+        # for chat_merge_consecutive_nickname feature
+        self.last_msg_name = None
+        self.last_msg_kind = None
 
         # connect signals
         id_ = self.tv.connect('motion_notify_event',
@@ -1216,6 +1221,8 @@ class ConversationTextview(gobject.GObject):
                     puny_tags = []
                     if use_other_tags:
                         puny_tags += other_tags
+                    if not puny_text:
+                        puny_text = _('Invalid URL')
                     puny_tags = [(ttt.lookup(t) if isinstance(t, str) else t) for t in puny_tags]
                     buffer_.insert_with_tags(end_iter, " (%s)" % puny_text, *puny_tags)
 
@@ -1228,7 +1235,7 @@ class ConversationTextview(gobject.GObject):
 
     def print_conversation_line(self, text, jid, kind, name, tim,
     other_tags_for_name=[], other_tags_for_time=[], other_tags_for_text=[],
-    subject=None, old_kind=None, xhtml=None, simple=False, graphics=True,
+    subject=None, xhtml=None, simple=False, graphics=True,
     displaymarking=None, iter_=None):
         """
         Print 'chat' type messages
@@ -1275,8 +1282,6 @@ class ConversationTextview(gobject.GObject):
             self.marks_queue.put(mark)
         if kind == 'incoming_queue':
             kind = 'incoming'
-        if old_kind == 'incoming_queue':
-            old_kind = 'incoming'
         # print the time stamp
         if not tim:
             # We don't have tim for outgoing messages...
@@ -1325,13 +1330,22 @@ class ConversationTextview(gobject.GObject):
                 mark1 = mark
         else: # not status nor /me
             if gajim.config.get('chat_merge_consecutive_nickname'):
-                if kind != old_kind or self.just_cleared:
+                if (self.last_msg_kind != kind or self.last_msg_name != name or
+                self.just_cleared):
+                    # Textview is empty or this is a msg from a new user
+                    # Print the Nickname
                     self.print_name(name, kind, other_tags_for_name,
                         direction_mark=direction_mark, iter_=end_iter)
                 else:
+                    # The last message was from the same Nickname
+                    # Dont print the Nickname
                     self.print_real_text(gajim.config.get(
                         'chat_merge_consecutive_nickname_indent'),
                         iter_=end_iter)
+                # Save the last Chatname so we know if we have to
+                # print the nickname on the next message
+                self.last_msg_name = name
+                self.last_msg_kind = kind
             else:
                 self.print_name(name, kind, other_tags_for_name,
                     direction_mark=direction_mark, iter_=end_iter)

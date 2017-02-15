@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/config.py
 ##
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2004-2005 Vincent Hanquez <tab AT snarc.org>
 ## Copyright (C) 2005 Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
@@ -175,8 +175,8 @@ class Config:
             'notify_on_new_gmail_email_command': [ opt_str, '', _('Specify the command to run when new mail arrives, e.g.: /usr/bin/getmail -q') ],
             'use_gpg_agent': [ opt_bool, False ],
             'change_roster_title': [ opt_bool, True, _('Add * and [n] in roster title?')],
-            'restore_lines': [opt_int, 4, _('How many lines to remember from previous conversation when a chat tab/window is reopened?')],
-            'restore_timeout': [opt_int, 60, _('How many minutes should last lines from previous conversation last.')],
+            'restore_lines': [opt_int, 10, _('How many history messages should be restored when a chat tab/window is reopened?')],
+            'restore_timeout': [opt_int, 0, _('How far back in time (minutes) history is restored. 0 means no limit.')],
             'muc_restore_lines': [opt_int, 20, _('How many lines to request from server when entering a groupchat. -1 means no limit')],
             'muc_restore_timeout': [opt_int, 60, _('How many minutes back to request logs when entering a groupchat. -1 means no limit')],
             'muc_autorejoin_timeout': [opt_int, 1, _('How many seconds to wait before trying to autorejoin to a conference you are being disconnected from. Set to 0 to disable autorejoining.')],
@@ -286,6 +286,7 @@ class Config:
             'enable_negative_priority': [ opt_bool, False, _('If True, you will be able to set a negative priority to your account in account modification window. BE CAREFUL, when you are logged in with a negative priority, you will NOT receive any message from your server.')],
             'use_gnomekeyring': [opt_bool, True, _('If True, Gajim will use Gnome Keyring (if available) to store account passwords.')],
             'use_kwalletcli': [opt_bool, True, _('If True, Gajim will use KDE Wallet (if kwalletcli is available) to store account passwords.')],
+            'use_winvault': [opt_bool, True, _('If True, Gajim will use the Windows Credential Vault to store account passwords.')],
             'show_contacts_number': [opt_bool, True, _('If True, Gajim will show number of online and total contacts in account and group rows.')],
             'treat_incoming_messages': [ opt_str, '', _('Can be empty, \'chat\' or \'normal\'. If not empty, treat all incoming messages as if they were of this type')],
             'scroll_roster_to_last_message': [opt_bool, True, _('If True, Gajim will scroll and select the contact who sent you the last message, if chat window is not already opened.')],
@@ -324,7 +325,7 @@ class Config:
                     'client_cert_encrypted': [ opt_bool, False, '', False ],
                     'savepass': [ opt_bool, False ],
                     'password': [ opt_str, '' ],
-                    'resource': [ opt_str, 'gajim', '', True ],
+                    'resource': [ opt_str, 'gajim.$rand', '', True ],
                     'priority': [ opt_int, 5, '', True ],
                     'adjust_priority_with_status': [ opt_bool, True, _('Priority will change automatically according to your status. Priorities are defined in autopriority_* options.') ],
                     'autopriority_online': [ opt_int, 50],
@@ -599,16 +600,14 @@ class Config:
     def is_valid_bool(self, val):
         if val == 'True':
             return True
-        elif val == 'False':
+        if val == 'False':
             return False
-        else:
-            ival = self.is_valid_int(val)
-            if ival:
-                return True
-            elif ival is None:
-                return None
-            return False
-        return None
+        ival = self.is_valid_int(val)
+        if ival:
+            return True
+        if ival is None:
+            return None
+        return False
 
     def is_valid_string(self, val):
         return val

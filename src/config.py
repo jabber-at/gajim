@@ -2,7 +2,7 @@
 ## src/config.py
 ##
 ## Copyright (C) 2003-2005 Vincent Hanquez <tab AT snarc.org>
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005 Alex Podaras <bigpod AT gmail.com>
 ##                    Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
@@ -167,7 +167,7 @@ class PreferencesWindow:
             if gajim.config.get('emoticons_theme') == l[i]:
                 emoticons_combobox.set_active(i)
         if not gajim.config.get('emoticons_theme'):
-            emoticons_combobox.set_active(len(l)-1)
+            emoticons_combobox.set_active(0)
 
         # Set default for single window type
         choices = common.config.opt_one_window_types

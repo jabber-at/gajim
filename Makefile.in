@@ -398,7 +398,6 @@ top_srcdir = @top_srcdir@
 SUBDIRS = src data po icons plugins
 bin_SCRIPTS = scripts/gajim scripts/gajim-history-manager scripts/gajim-remote
 EXTRA_DIST = \
-	README.html \
 	THANKS.artists \
 	autogen.sh			\
 	intltool-extract.in \

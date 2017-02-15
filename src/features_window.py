@@ -5,7 +5,7 @@
 ##                    Julien Pivotto <roidelapluie AT gmail.com>
 ##                    Stefan Bethge <stefan AT lanpartei.de>
 ##                    Stephan Erb <steve-e AT h3c.de>
-## Copyright (C) 2007-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2007-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##
 ## This file is part of Gajim.
@@ -72,8 +72,8 @@ class FeaturesWindow:
                 _('Feature not available under Windows.')),
             _('Password encryption'): (self.some_keyring_available,
                 _('Passwords can be stored securely and not just in plaintext.'),
-                _('Requires gnome-keyring and python-gnome2-desktop, or kwalletcli.'),
-                _('Feature not available under Windows.')),
+                _('Requires gnome-keyring and python-gnome2-desktop, or kwalletcli'),
+                _('On Windows the Windows Credential Vault is used.')),
             _('SRV'): (self.srv_available,
                 _('Ability to connect to servers which are using SRV records.'),
                 _('Requires dnsutils.'),
@@ -202,7 +202,7 @@ class FeaturesWindow:
 
     def some_keyring_available(self):
         if os.name == 'nt':
-            return False
+            return True
         if kwalletbinding.kwallet_available():
             return True
         try:
