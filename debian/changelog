@@ -1,6 +1,7 @@
 gajim (0.16.7-0.1) unstable; urgency=low
 
   * New upstream release.
+  * Readme.html is gone from source, use plain text version instead.
 
  -- Mathias Ertl <mati@jabber.at>  Wed, 15 Feb 2017 22:46:06 +0100
 
