@@ -6,7 +6,7 @@
 ## Copyright (C) 2006-2007 Tomasz Melcer <liori AT exroot.org>
 ##                         Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Julien Pivotto <roidelapluie AT gmail.com>
 ## Copyright (C) 2007-2008 Brendan Taylor <whateley AT gmail.com>
 ##                         Jean-Marie Traissard <jim AT lapin.org>
@@ -768,7 +768,7 @@ class ConnectionIBBytestream(ConnectionBytestream):
         elif typ == 'result':
             self.SendHandler()
         elif typ == 'error':
-            gajim.socks5queue.error_cb()
+            gajim.socks5queue.error_cb('Error', stanza.getErrorMsg())
         else:
             conn.send(nbxmpp.Error(stanza, nbxmpp.ERR_BAD_REQUEST))
         raise nbxmpp.NodeProcessed

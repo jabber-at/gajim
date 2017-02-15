@@ -175,7 +175,7 @@ class Zeroconf:
                         # so this probably needs to be revised again.
                         if old_resolved_info[i][0:2] == (interface, protocol):
                             log.debug('Deleting resolved info for interface %i, protocol %i, host %s, aprotocol %i, address %s, port %i' % old_resolved_info[i])
-                            del cur_hosts[i]
+                            del old_resolved_info[i]
                             break
                     resolved_info = resolved_info + old_resolved_info
                     log.debug('Collected resolved info is now: %s' % (resolved_info,))
@@ -453,7 +453,7 @@ class Zeroconf:
     # refresh txt data of all contacts manually (no callback available)
     def resolve_all(self):
         if not self.connected:
-            return
+            return False
         for val in self.contacts.values():
             # get txt data from last recorded resolved info
             # TODO: Better try to get it from last IPv6 mDNS, then last IPv4?
@@ -463,6 +463,7 @@ class Zeroconf:
                     self.avahi.PROTO_UNSPEC, dbus.UInt32(0),
                     reply_handler=self.service_resolved_all_callback,
                     error_handler=self.error_callback)
+        return True
 
     def get_contacts(self):
         return self.contacts

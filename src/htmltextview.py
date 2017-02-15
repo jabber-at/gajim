@@ -4,7 +4,7 @@
 ## Copyright (C) 2005 Gustavo J. A. M. Carneiro
 ## Copyright (C) 2006 Santiago Gala
 ## Copyright (C) 2006-2007 Jean-Marie Traissard <jim AT lapin.org>
-## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2008 Jonathan Schleifer <js-gajim AT webkeks.org>
 ##                    Julien Pivotto <roidelapluie AT gmail.com>
@@ -704,7 +704,7 @@ class HtmlHandler(xml.sax.handler.ContentHandler):
             cite = attrs.get('cite', None)
             if cite:
                 tag = self.textbuf.create_tag(id_)
-                tag.title = title
+                tag.title = attrs.get('title', None)
                 tag.is_anchor = True
         elif name in LIST_ELEMS:
             style += ';margin-left: 2em'
@@ -871,6 +871,8 @@ class HtmlTextView(gtk.TextView):
                 return
             text = getattr(tag, 'title', False)
             if text:
+                if len(text) > 50:
+                    text = text[:47] + '...'
                 pointer = self.get_pointer()
                 position = self.window.get_origin()
                 self.tooltip.show_tooltip(text, 8, position[1] + pointer[1])

@@ -2,7 +2,7 @@
 ## src/common/connection.py
 ##
 ## Copyright (C) 2003-2005 Vincent Hanquez <tab AT snarc.org>
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005 Alex Mauer <hawke AT hawkesnest.net>
 ##                    Stéphan Kochen <stephan AT kochen.nl>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
@@ -36,7 +36,7 @@ import os
 import random
 import socket
 import operator
-
+import string
 import time
 import locale
 import hmac
@@ -199,8 +199,10 @@ class CommonConnection:
         resource = gajim.config.get_per('accounts', self.name, 'resource')
         # All valid resource substitution strings should be added to this hash.
         if resource:
+            rand = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
             resource = Template(resource).safe_substitute({
-                    'hostname': socket.gethostname()
+                    'hostname': socket.gethostname(),
+                    'rand': rand
             })
         return resource
 
@@ -394,7 +396,7 @@ class CommonConnection:
                 form_node, user_nick, attention, correction_msg, callback)
             return
         # Encryption failed, do not send message
-        tim = localtime()
+        tim = time.localtime()
         gajim.nec.push_incoming_event(MessageNotSentEvent(None, conn=self,
             jid=jid, message=msgtxt, error=error, time_=tim, session=session))
 
@@ -692,8 +694,10 @@ class CommonConnection:
             else:
                 self.gpg.passphrase = passphrase
 
-    def ask_gpg_keys(self):
+    def ask_gpg_keys(self, keyID=None):
         if self.gpg:
+            if keyID:
+                return self.gpg.get_key(keyID)
             return self.gpg.get_keys()
         return None
 
@@ -1622,7 +1626,7 @@ class Connection(CommonConnection, ConnectionHandlers):
         iq.addChild(name='ping', namespace=nbxmpp.NS_PING)
         iq.setID(id_)
         def _on_response(resp):
-            timePong = time_time()
+            timePong = time.time()
             if not nbxmpp.isResultNode(resp):
                 gajim.nec.push_incoming_event(PingErrorEvent(None, conn=self,
                     contact=pingTo))
@@ -1631,7 +1635,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             gajim.nec.push_incoming_event(PingReplyEvent(None, conn=self,
                 contact=pingTo, seconds=timeDiff, control=control))
         if pingTo:
-            timePing = time_time()
+            timePing = time.time()
             self.connection.SendAndCallForResponse(iq, _on_response)
         else:
             self.connection.SendAndCallForResponse(iq, self._on_xmpp_ping_answer)
@@ -1715,16 +1719,6 @@ class Connection(CommonConnection, ConnectionHandlers):
         iq = self.build_invisible_rule()
         self.connection.send(iq)
 
-    def activate_privacy_rule(self, name):
-        """
-        Activate a privacy rule
-        """
-        if not gajim.account_is_connected(self.name):
-            return
-        iq = nbxmpp.Iq('set', nbxmpp.NS_PRIVACY, xmlns='')
-        iq.setQuery().setTag('active', {'name': name})
-        self.connection.send(iq)
-
     def get_max_blocked_list_order(self):
         max_order = 0
         for rule in self.blocked_list:
@@ -1734,6 +1728,8 @@ class Connection(CommonConnection, ConnectionHandlers):
         return max_order
 
     def block_contacts(self, contact_list, message):
+        if self.privacy_default_list is None:
+            self.privacy_default_list = 'block'
         if not self.privacy_rules_supported:
             if self.blocking_supported: #XEP-0191
                 iq = nbxmpp.Iq('set', xmlns='')
@@ -1746,16 +1742,15 @@ class Connection(CommonConnection, ConnectionHandlers):
         for contact in contact_list:
             self.send_custom_status('offline', message, contact.jid)
             max_order = self.get_max_blocked_list_order()
-            new_rule = {'order': str(max_order + 1), 'type': 'jid', 'action': 'deny',
-                'value' : contact.jid, 'child': ['message', 'iq',
-                'presence-out']}
+            new_rule = {'order': str(max_order + 1),
+                        'type': 'jid',
+                        'action': 'deny',
+                        'value': contact.jid}
             self.blocked_list.append(new_rule)
             self.blocked_contacts.append(contact.jid)
-        self.set_privacy_list('block', self.blocked_list)
+        self.set_privacy_list(self.privacy_default_list, self.blocked_list)
         if len(self.blocked_list) == 1:
-            self.set_active_list('block')
-            self.set_default_list('block')
-        self.get_privacy_list('block')
+            self.set_default_list(self.privacy_default_list)
 
     def unblock_contacts(self, contact_list):
         if not self.privacy_rules_supported:
@@ -1777,15 +1772,14 @@ class Connection(CommonConnection, ConnectionHandlers):
             if rule['action'] != 'deny' or rule['type'] != 'jid' \
             or rule['value'] not in self.to_unblock:
                 self.new_blocked_list.append(rule)
-        self.set_privacy_list('block', self.new_blocked_list)
-        self.get_privacy_list('block')
         if len(self.new_blocked_list) == 0:
             self.blocked_list = []
             self.blocked_contacts = []
             self.blocked_groups = []
             self.set_default_list('')
-            self.set_active_list('')
-            self.del_privacy_list('block')
+            self.del_privacy_list(self.privacy_default_list)
+        else:
+            self.set_privacy_list(self.privacy_default_list, self.new_blocked_list)
         if not gajim.interface.roster.regroup:
             show = gajim.SHOW_LIST[self.connected]
         else:   # accounts merged
@@ -1802,14 +1796,14 @@ class Connection(CommonConnection, ConnectionHandlers):
         for contact in contact_list:
             self.send_custom_status('offline', message, contact.jid)
         max_order = self.get_max_blocked_list_order()
-        new_rule = {'order': str(max_order + 1), 'type': 'group', 'action': 'deny',
-            'value' : group, 'child': ['message', 'iq', 'presence-out']}
+        new_rule = {'order': str(max_order + 1),
+                    'type': 'group',
+                    'action': 'deny',
+                    'value': group}
         self.blocked_list.append(new_rule)
-        self.set_privacy_list('block', self.blocked_list)
+        self.set_privacy_list(self.privacy_default_list, self.blocked_list)
         if len(self.blocked_list) == 1:
-            self.set_active_list('block')
-            self.set_default_list('block')
-        self.get_privacy_list('block')
+            self.set_default_list(self.privacy_default_list)
 
     def unblock_group(self, group, contact_list):
         if not self.privacy_rules_supported:
@@ -1821,15 +1815,14 @@ class Connection(CommonConnection, ConnectionHandlers):
             if rule['action'] != 'deny' or rule['type'] != 'group' or \
             rule['value'] != group:
                 self.new_blocked_list.append(rule)
-        self.set_privacy_list('block', self.new_blocked_list)
-        self.get_privacy_list('block')
         if len(self.new_blocked_list) == 0:
             self.blocked_list = []
             self.blocked_contacts = []
             self.blocked_groups = []
             self.set_default_list('')
-            self.set_active_list('')
-            self.del_privacy_list('block')
+            self.del_privacy_list(self.privacy_default_list)
+        else:
+            self.set_privacy_list(self.privacy_default_list, self.new_blocked_list)
         if not gajim.interface.roster.regroup:
             show = gajim.SHOW_LIST[self.connected]
         else:   # accounts merged
@@ -1870,7 +1863,7 @@ class Connection(CommonConnection, ConnectionHandlers):
         if iq_obj.getType() == 'error': # server doesn't support privacy lists
             return
         # active the privacy rule
-        self.activate_privacy_rule('invisible')
+        self.set_active_list('invisible')
         self.connected = gajim.SHOW_LIST.index('invisible')
         self.status = msg
         priority = unicode(gajim.get_priority(self.name, 'invisible'))
@@ -2102,12 +2095,7 @@ class Connection(CommonConnection, ConnectionHandlers):
 
     def _change_from_invisible(self):
         if self.privacy_rules_supported:
-            if self.blocked_list:
-                self.activate_privacy_rule('block')
-            else:
-                iq = self.build_privacy_rule('visible', 'allow')
-                self.connection.send(iq)
-                self.activate_privacy_rule('visible')
+            self.set_active_list('')
 
     def _update_status(self, show, msg):
         xmpp_show = helpers.get_xmpp_show(show)
@@ -2153,7 +2141,7 @@ class Connection(CommonConnection, ConnectionHandlers):
                     _cb_parameters={"jid":jid, "msg":msg, "keyID":keyID, "forward_from":forward_from,
                     "session":session, "original_message":original_message, "subject":subject, "type_":type_,
                     "msg_iq":msg_iq, "xhtml":xhtml, "obj":obj}))
-            
+
         self._prepare_message(obj.jid, obj.message, obj.keyID, type_=obj.type_,
             subject=obj.subject, chatstate=obj.chatstate, msg_id=obj.msg_id,
             resource=obj.resource, user_nick=obj.user_nick, xhtml=obj.xhtml,
@@ -2166,7 +2154,7 @@ class Connection(CommonConnection, ConnectionHandlers):
         if obj.conn.name != self.name:
             return
         obj.msg_id = self.connection.send(obj.msg_iq, now=obj.now)
-        
+
         # obj in this function is the obj as seen in _nec_message_outgoing()
         def cb(obj, jid, msg, keyID, forward_from, session, original_message,
         subject, type_, msg_iq, xhtml, msg_id):
@@ -2187,7 +2175,7 @@ class Connection(CommonConnection, ConnectionHandlers):
             else:
                 self.log_message(jid, msg, forward_from, session,
                     original_message, subject, type_, xhtml)
-        
+
         cb(msg_id=obj.msg_id, **obj._cb_parameters)
 
     def send_contacts(self, contacts, fjid, type_='message'):
@@ -2423,9 +2411,10 @@ class Connection(CommonConnection, ConnectionHandlers):
         self.connection.send(iq)
 
     def _nec_privacy_list_received(self, obj):
+        roster = gajim.interface.roster
         if obj.conn.name != self.name:
             return
-        if obj.list_name != 'block':
+        if obj.list_name != self.privacy_default_list:
             return
         self.blocked_contacts = []
         self.blocked_groups = []
@@ -2452,6 +2441,11 @@ class Connection(CommonConnection, ConnectionHandlers):
                     self.blocked_groups.append(rule['value'])
             self.blocked_list.append(rule)
 
+            if rule['type'] == 'jid':
+                roster.draw_contact(rule['value'], self.name)
+            if rule['type'] == 'group':
+                roster.draw_group(rule['value'], self.name)
+
     def _request_bookmarks_xml(self):
         if not gajim.account_is_connected(self.name):
             return
@@ -2473,7 +2467,8 @@ class Connection(CommonConnection, ConnectionHandlers):
         """
         if not gajim.account_is_connected(self.name):
             return
-        if self.pubsub_supported and storage_type != 'xml':
+        if self.pubsub_supported and self.pubsub_publish_options_supported \
+                and storage_type != 'xml':
             self.send_pb_retrieve('', 'storage:bookmarks')
             # some server (ejabberd) are so slow to answer that we request via XML
             # if we don't get answer in the next 30 seconds
@@ -2488,6 +2483,7 @@ class Connection(CommonConnection, ConnectionHandlers):
         storage_type can be set to 'pubsub' or 'xml' so store in only one method
         else it will be stored on both
         """
+        NS_GAJIM_BM = 'xmpp:gajim.org/bookmarks'
         if not gajim.account_is_connected(self.name):
             return
         iq = nbxmpp.Node(tag='storage', attrs={'xmlns': 'storage:bookmarks'})
@@ -2495,8 +2491,9 @@ class Connection(CommonConnection, ConnectionHandlers):
             iq2 = iq.addChild(name = "conference")
             iq2.setAttr('jid', bm['jid'])
             iq2.setAttr('autojoin', bm['autojoin'])
-            iq2.setAttr('minimize', bm['minimize'])
             iq2.setAttr('name', bm['name'])
+            iq2.setTag('minimize', namespace=NS_GAJIM_BM). \
+                setData(bm['minimize'])
             # Only add optional elements if not empty
             # Note: need to handle both None and '' as empty
             #   thus shouldn't use "is not None"
@@ -2505,7 +2502,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             if bm.get('password', None):
                 iq2.setTagData('password', bm['password'])
             if bm.get('print_status', None):
-                iq2.setTagData('print_status', bm['print_status'])
+                iq2.setTag('print_status', namespace=NS_GAJIM_BM). \
+                    setData(bm['print_status'])
 
         if self.pubsub_supported and self.pubsub_publish_options_supported and \
         storage_type != 'xml':

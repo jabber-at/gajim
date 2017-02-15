@@ -6,7 +6,7 @@
 ## Copyright (C) 2006-2007 Tomasz Melcer <liori AT exroot.org>
 ##                         Travis Shirk <travis AT pobox.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2007 Julien Pivotto <roidelapluie AT gmail.com>
 ## Copyright (C) 2007-2008 Brendan Taylor <whateley AT gmail.com>
 ##                         Jean-Marie Traissard <jim AT lapin.org>
@@ -590,7 +590,11 @@ class ConnectionVcard:
         elif self.awaiting_answers[id_][0] == PRIVACY_ARRIVED:
             del self.awaiting_answers[id_]
             if iq_obj.getType() != 'error':
-                self.get_privacy_list('block')
+                for list_ in iq_obj.getQueryPayload():
+                    if list_.getName() == 'default':
+                        self.privacy_default_list = list_.getAttr('name')
+                        self.get_privacy_list(self.privacy_default_list)
+                        break
                 # Ask metacontacts before roster
                 self.get_metacontacts()
             else:
@@ -897,6 +901,11 @@ class ConnectionHandlersBase:
 
         # keep track of sessions this connection has with other JIDs
         self.sessions = {}
+
+        # IDs of sent messages (https://trac.gajim.org/ticket/8222)
+        self.sent_message_ids = []
+
+        self.received_message_hashes = []
 
         # We decrypt GPG messages one after the other. Keep queue in mem
         self.gpg_messages_to_decrypt = []
@@ -1214,11 +1223,12 @@ class ConnectionHandlersBase:
         self.name, 'request_receipt'):
             ctrl = obj.session.control
             if not ctrl:
-                # Received <message> doesn't have the <thread> element?
-                # search in all sessions
-                for s in self.get_sessions(obj.jid):
-                    if s.control:
-                        ctrl = s.control
+                # Received <message> doesn't have the <thread> element
+                # or control is not bound to session?
+                # --> search for it
+                ctrl = gajim.interface.msg_win_mgr.search_control(obj.jid,
+                    obj.conn.name, obj.resource)
+            
             if ctrl:
                 id_ = obj.receipt_received_tag.getAttr('id')
                 if not id_:
@@ -1458,8 +1468,8 @@ ConnectionHandlersBase, ConnectionJingle, ConnectionIBBytestream):
         # ID of urn:xmpp:ping requests
         self.awaiting_xmpp_ping_id = None
         self.continue_connect_info = None
-        # IDs of sent messages (https://trac.gajim.org/ticket/8222)
-        self.sent_message_ids = []
+
+        self.privacy_default_list = None
 
         try:
             self.sleeper = common.sleepy.Sleepy()
@@ -2072,6 +2082,11 @@ ConnectionHandlersBase, ConnectionJingle, ConnectionIBBytestream):
         if q:
             result.delChild(q)
         self.connection.send(result)
+
+        for list_ in iq_obj.getQueryPayload():
+            if list_.getName() == 'list':
+                self.get_privacy_list(list_.getAttr('name'))
+
         raise nbxmpp.NodeProcessed
 
     def _getRoster(self):

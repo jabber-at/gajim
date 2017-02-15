@@ -1,6 +1,6 @@
 ## src/common/gpg.py
 ##
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005 Alex Mauer <hawke AT hawkesnest.net>
 ## Copyright (C) 2005-2006 Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2007 Stephan Erb <steve-e AT h3c.de>
@@ -25,9 +25,11 @@
 from gajim import HAVE_GPG, GPG_BINARY
 import os
 import locale
+import logging
 
 if HAVE_GPG:
     import gnupg
+    gnupg.logger = logging.getLogger('gajim.c.gnupg')
 
     class GnuPG(gnupg.GPG):
         def __init__(self, use_agent=False):
@@ -88,7 +90,7 @@ if HAVE_GPG:
 
             if result.fingerprint:
                 return self._stripHeaderFooter(str(result))
-            if result.status == 'key expired':
+            if hasattr(result, 'status') and result.status == 'key expired':
                 return 'KEYEXPIRED'
             return 'BAD_PASSPHRASE'
 
@@ -111,6 +113,9 @@ if HAVE_GPG:
                     return result.key_id
 
             return ''
+
+        def get_key(self, keyID):
+            return super(GnuPG, self).list_keys(keys=[keyID])
 
         def get_keys(self, secret=False):
             keys = {}

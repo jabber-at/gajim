@@ -2,7 +2,7 @@
 ## src/common/defs.py
 ##
 ## Copyright (C) 2006 Nikos Kouremenos <kourem AT gmail.com>
-## Copyright (C) 2006-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2006-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2006-2008 Jean-Marie Traissard <jim AT lapin.org>
 ## Copyright (C) 2007 Brendan Taylor <whateley AT gmail.com>
 ##                    Tomasz Melcer <liori AT exroot.org>
@@ -23,20 +23,22 @@
 ## along with Gajim. If not, see <http://www.gnu.org/licenses/>.
 ##
 
-docdir = '../'
-basedir   = '../'
-localedir = '../po'
-
-version = '0.16.6'
 import subprocess
+import sys
+import os.path
+
+docdir = '../'
+basedir = '../'
+localedir = '../po'
+version = '0.16.7'
+
 try:
-    node = subprocess.Popen('hg tip --template "{node|short}"', shell=True,
+    node = subprocess.Popen('git rev-parse --short=12 HEAD', shell=True,
         stdout=subprocess.PIPE).communicate()[0]
     if node:
-        version += '-' + node
+        version += '-' + node.replace('\n', '')
 except Exception:
     pass
 
-import sys, os.path
 for base in ('.', 'common'):
     sys.path.append(os.path.join(base, '.libs'))

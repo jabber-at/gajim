@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 ## src/common/helpers.py
 ##
-## Copyright (C) 2003-2014 Yann Leboulanger <asterix AT lagaule.org>
+## Copyright (C) 2003-2017 Yann Leboulanger <asterix AT lagaule.org>
 ## Copyright (C) 2005-2006 Dimitur Kirov <dkirov AT gmail.com>
 ##                         Nikos Kouremenos <kourem AT gmail.com>
 ## Copyright (C) 2006 Alex Mauer <hawke AT hawkesnest.net>
@@ -145,8 +145,12 @@ def puny_encode_url(url):
     _url = url
     if '//' not in _url:
         _url = '//' + _url
-    o = urlparse(_url)
-    p_loc = idn_to_ascii(o.netloc)
+    try:
+        o = urlparse(_url)
+        p_loc = idn_to_ascii(o.netloc)
+    except:
+        log.debug('urlparse failed: %s', url)
+        return False
     return url.replace(o.netloc, p_loc)
 
 def parse_resource(resource):
@@ -643,8 +647,12 @@ def datetime_tuple(timestamp):
     tim = tim.split('.')[0]
     tim = time.strptime(date + 'T' + tim, '%Y%m%dT%H:%M:%S')
     if zone:
-        tim = datetime.datetime.fromtimestamp(time.mktime(t))
-        zone = strptime.time(zone, '%H:%M')
+        zone = zone.replace(':', '')
+        tim = datetime.datetime.fromtimestamp(time.mktime(tim))
+        if len(zone) > 2:
+            zone = time.strptime(zone, '%H%M')
+        else:
+            zone = time.strptime(zone, '%H')
         zone = datetime.timedelta(hours=zone.tm_hour, minutes=zone.tm_min)
         tim += zone * sign
         tim = tim.timetuple()
@@ -1310,9 +1318,9 @@ def prepare_and_validate_gpg_keyID(account, jid, keyID):
             # An unsigned presence, just use the assigned key
             keyID = attached_keys[attached_keys.index(jid) + 1]
         elif keyID:
-            public_keys = gajim.connections[account].ask_gpg_keys()
+            full_key = gajim.connections[account].ask_gpg_keys(keyID=keyID)
             # Assign the corresponding key, if we have it in our keyring
-            if keyID in public_keys:
+            if full_key:
                 for u in gajim.contacts.get_contacts(account, jid):
                     u.keyID = keyID
                 keys_str = gajim.config.get_per('accounts', account,
