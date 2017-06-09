@@ -1012,7 +1012,7 @@ class Interface:
         if file_props.type_ == 'r': # we receive a file
             gajim.socks5queue.remove_receiver(file_props.sid, True, True)
             if file_props.session_type == 'jingle':
-                if file_props.hash_:
+                if file_props.hash_ and file_props.error == 0:
                     # We compare hashes in a new thread
                     self.hashThread = Thread(target=self.__compare_hashes,
                         args=(account, file_props))
@@ -1021,7 +1021,8 @@ class Interface:
                     # We disn't get the hash, sender probably don't support that
                     jid = unicode(file_props.sender)
                     self.popup_ft_result(account, jid, file_props)
-                    ft.set_status(file_props, 'ok')
+                    if file_props.error == 0:
+                        ft.set_status(file_props, 'ok')
                     session = gajim.connections[account].get_jingle_session(jid=None,
                         sid=file_props.sid)
                     # End jingle session
@@ -1651,16 +1652,11 @@ class Interface:
         gajim.events.add_event(account, jid, event)
 
         self.roster.show_title()
-        if no_queue: # We didn't have a queue: we change icons
-            if not gajim.contacts.get_contact_with_highest_priority(account,
-            jid):
-                if event.type_ == 'gc-invitation':
-                    self.roster.add_groupchat(jid, account, status='offline')
-                else:
-                    # add contact to roster ("Not In The Roster") if he is not
-                    self.roster.add_to_not_in_the_roster(account, jid)
-            else:
+        if no_queue:  # We didn't have a queue: we change icons
+            if gajim.contacts.get_contact_with_highest_priority(account, jid):
                 self.roster.draw_contact(jid, account)
+            else:
+                self.roster.add_to_not_in_the_roster(account, jid)
 
         # Select the big brother contact in roster, it's visible because it has
         # events.
@@ -2971,7 +2967,7 @@ class Interface:
 
         if gajim.config.get('networkmanager_support') and \
         dbus_support.supported:
-            import network_manager_listener
+            import network_watcher
 
         if dbus_support.supported:
             import upower_listener

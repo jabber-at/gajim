@@ -172,7 +172,7 @@ src/message_textview.py
 src/message_window.py
 src/music_track_listener.py
 src/negotiation.py
-src/network_manager_listener.py
+src/network_watcher.py
 src/notify.py
 src/plugins/gui.py
 src/plugins/helpers.py

@@ -2759,7 +2759,8 @@ class RosterWindow:
                 typ = 'error'
             if obj.forwarded and obj.sent:
                 typ = 'out'
-                xep0184_id = obj.id_
+                if obj.jid != gajim.get_jid_from_account(obj.conn.name):
+                    xep0184_id = obj.id_
 
             obj.session.control.print_conversation(obj.msgtxt, typ,
                 tim=obj.timestamp, encrypted=obj.encrypted, subject=obj.subject,
@@ -2855,13 +2856,15 @@ class RosterWindow:
         gajim.connections[account].send_motd(server)
 
     def on_history_manager_menuitem_activate(self, widget):
-        if os.name == 'nt':
-            if os.path.exists('history_manager.exe'): # user is running stable
-                helpers.exec_command('history_manager.exe')
-            else: # user is running svn
-                helpers.exec_command('%s history_manager.py' % sys.executable)
-        else: # Unix user
-            helpers.exec_command('%s history_manager.py' % sys.executable)
+        config_path = '-c %s' % gajim.gajimpaths.data_root
+        posix = os.name != 'nt'
+        if os.path.exists('history_manager.exe'):  # Windows
+            helpers.exec_command('history_manager.exe %s' % config_path,
+                                 posix=posix)
+        else:  # Linux or running from Git
+            helpers.exec_command(
+                '%s history_manager.py %s' % (sys.executable, config_path),
+                posix=posix)
 
     def on_info(self, widget, contact, account):
         """
@@ -4059,7 +4062,7 @@ class RosterWindow:
         if event.keyval == gtk.keysyms.Escape:
             if self.rfilter_enabled:
                 self.disable_rfilter()
-                return
+                return True
             if gajim.interface.msg_win_mgr.mode == \
             MessageWindowMgr.ONE_MSG_WINDOW_ALWAYS_WITH_ROSTER and \
             gajim.interface.msg_win_mgr.one_window_opened():
@@ -4167,7 +4170,7 @@ class RosterWindow:
             contact = gajim.contacts.get_contact_with_highest_priority(account,
                     jid)
         if jid == gajim.get_jid_from_account(account):
-            resource = contact.resource
+            resource = None
 
         gajim.interface.on_open_chat_window(None, contact, account, \
             resource=resource, session=session)

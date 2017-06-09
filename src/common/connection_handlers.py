@@ -1206,17 +1206,19 @@ class ConnectionHandlersBase:
             jid_to = gajim.get_jid_without_resource(fjid_to)
             if jid_to == gajim.get_jid_from_account(self.name):
                 reply = True
-        if obj.receipt_request_tag and gajim.config.get_per('accounts',
-        self.name, 'answer_receipts') and ((contact and contact.sub \
-        not in (u'to', u'none')) or gc_contact) and obj.mtype != 'error' and \
-        reply:
-            receipt = nbxmpp.Message(to=obj.fjid, typ='chat')
-            receipt.setTag('received', namespace='urn:xmpp:receipts',
-                attrs={'id': obj.id_})
 
-            if obj.thread_id:
-                receipt.setThread(obj.thread_id)
-            self.connection.send(receipt)
+        if obj.jid != gajim.get_jid_from_account(self.name):
+            if obj.receipt_request_tag and gajim.config.get_per('accounts',
+            self.name, 'answer_receipts') and ((contact and contact.sub \
+            not in (u'to', u'none')) or gc_contact) and obj.mtype != 'error' and \
+            reply:
+                receipt = nbxmpp.Message(to=obj.fjid, typ='chat')
+                receipt.setTag('received', namespace='urn:xmpp:receipts',
+                    attrs={'id': obj.id_})
+
+                if obj.thread_id:
+                    receipt.setThread(obj.thread_id)
+                self.connection.send(receipt)
 
         # We got our message's receipt
         if obj.receipt_received_tag and gajim.config.get_per('accounts',
@@ -1234,21 +1236,13 @@ class ConnectionHandlersBase:
                 if not id_:
                     # old XEP implementation
                     id_ = obj.id_
-                ctrl.conv_textview.hide_xep0184_warning(id_)
+                ctrl.conv_textview.show_xep0184_ack(id_)
 
         if obj.mtype == 'error':
             if not obj.msgtxt:
                 obj.msgtxt = _('message')
             self.dispatch_error_message(obj.stanza, obj.msgtxt,
                 obj.session, obj.fjid, obj.timestamp)
-            return True
-        elif obj.invite_tag is not None:
-            gajim.nec.push_incoming_event(GcInvitationReceivedEvent(None,
-                conn=self, msg_obj=obj))
-            return True
-        elif obj.decline_tag is not None:
-            gajim.nec.push_incoming_event(GcDeclineReceivedEvent(None,
-                conn=self, msg_obj=obj))
             return True
         elif obj.mtype == 'groupchat':
             gajim.nec.push_incoming_event(GcMessageReceivedEvent(None,
