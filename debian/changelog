@@ -10,6 +10,7 @@ gajim (0.16.8-0.1) unstable; urgency=low
     * Drop farstream from suggestions.
     * debian/rules: remove rules meant to create the now deprecated Debian
       menu icon.
+    * Remove debian/patches/ since we don't include any patches right now.
 
  -- Mathias Ertl <mati@jabber.at>  Fri, 09 Jun 2017 11:52:27 +0200
 
