@@ -3,6 +3,7 @@ gajim (0.16.8-0.1) unstable; urgency=low
   * New upstream release.
   * Update Standards-Version to 3.9.8.
   * Merge changes from the mainline debian package:
+    * Update debian/watch.
     * Add dh-python as build dependency.
     * pyasn1 is now a dependency.
     * dbus and python-dbus are now recommended and no longer a dependency.
