@@ -3,28 +3,55 @@ Section: net
 Priority: optional
 Maintainer: Mathias Ertl <mati@jabber.at>
 XSBC-Orig-Maintainer: Maintainer: Tanguy Ortolo <tanguy+debian@ortolo.eu>
-Build-Depends: debhelper (>= 9), autotools-dev,
-               python (>= 2.6.6-3~), gettext (>= 0.17-4), intltool (>= 0.40.1), imagemagick, libglib2.0-dev
-Standards-Version: 3.9.6
-Homepage: http://www.gajim.org
+Build-Depends: 
+    autotools-dev,
+    debhelper (>= 9),
+    dh-python,
+    gettext (>= 0.17-4),
+    imagemagick,
+    intltool (>= 0.40.1),
+    libglib2.0-dev,
+    python (>= 2.6.6-3~),
+Standards-Version: 3.9.8
+Homepage: https://www.gajim.org
 Vcs-Git: https://github.com/jabber-at/gajim.git
 Vcs-Browser: https://github.com/jabber-at/gajim
 
 Package: gajim
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-gtk2 (>= 2.22.0), dnsutils,
-            dbus, python-dbus (>=0.81), python-nbxmpp (>= 0.5.3)
-Recommends: python-openssl (>= 0.12), python-pyasn1, python-crypto,
-            notification-daemon, ca-certificates
-Suggests: libxss1,
-          avahi-daemon, python-avahi,
-          libgtkspell0, aspell-en | aspell-dictionary,
-          python-gnome2, python-gnomekeyring, gnome-keyring, kwalletcli,
-          python-kerberos (>= 1.1),
-          texlive-latex-base, dvipng,
-          python-farstream, gstreamer0.10-plugins-ugly,
-          python-gconf, nautilus-sendto, network-manager,
-          python-pycurl, python-gupnp-igd
+Depends:
+    ${misc:Depends}, ${python:Depends},
+    dnsutils,
+    python-gtk2 (>= 2.22.0),
+    python-nbxmpp (>= 0.5.3),
+    python-openssl (>= 0.12),
+    python-pyasn1,
+Recommends:
+    ca-certificates,
+    dbus,
+    notification-daemon,
+    pulseaudio-utils | alsa-utils | sox | oss4-base,
+    python-crypto,
+    python-dbus (>=0.81),
+Suggests:
+    aspell-en | aspell-dictionary,
+    avahi-daemon,
+    dvipng,
+    gnome-keyring,
+    gstreamer0.10-plugins-ugly,
+    kwalletcli,
+    libgtkspell0,
+    libxss1,
+    nautilus-sendto,
+    network-manager,
+    python-avahi,
+    python-gconf,
+    python-gnome2,
+    python-gnomekeyring,
+    python-gupnp-igd,
+    python-kerberos (>= 1.1),
+    python-pycurl,
+    texlive-latex-base,
 Description: GTK+-based Jabber client
  Gajim is a Jabber client. It has a tabbed user interface with normal chats,
  group chats, and has many features such as, TLS, GPG, SSL, multiple accounts,
