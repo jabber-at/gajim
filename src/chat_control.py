@@ -53,7 +53,7 @@ from common.stanza_session import EncryptedStanzaSession, ArchivingStanzaSession
 from common.contacts import GC_Contact
 from common.logger import constants
 from nbxmpp.protocol import NS_XHTML, NS_XHTML_IM, NS_FILE, NS_MUC
-from nbxmpp.protocol import NS_RECEIPTS, NS_ESESSION
+from nbxmpp.protocol import NS_ESESSION
 from nbxmpp.protocol import NS_JINGLE_RTP_AUDIO, NS_JINGLE_RTP_VIDEO
 from nbxmpp.protocol import NS_JINGLE_ICE_UDP, NS_JINGLE_FILE_TRANSFER
 from nbxmpp.protocol import NS_CHATSTATES
@@ -937,7 +937,7 @@ class ChatControlBase(MessageControl, ChatCommandProcessor, CommandTools):
                 displaymarking=displaymarking)
 
         if xep0184_id is not None:
-            textview.show_xep0184_warning(xep0184_id)
+            textview.add_xep0184_mark(xep0184_id)
 
         if not count_as_new:
             return
@@ -2362,7 +2362,10 @@ class ChatControl(ChatControlBase):
             if not keyID:
                 keyID = 'UNKNOWN'
 
-        chatstates_on = gajim.config.get('outgoing_chat_state_notifications') != \
+        if self.contact.jid == gajim.get_jid_from_account(self.account):
+            chatstates_on = False
+        else:
+            chatstates_on = gajim.config.get('outgoing_chat_state_notifications') != \
                 'disabled'
         chatstate_to_send = None
         if chatstates_on and contact is not None:
@@ -2377,11 +2380,10 @@ class ChatControl(ChatControlBase):
 
         def _on_sent(msg_stanza, message, encrypted, xhtml, label, old_txt):
             id_ = msg_stanza.getID()
-            if self.contact.supports(NS_RECEIPTS) and gajim.config.get_per(
-            'accounts', self.account, 'request_receipt'):
-                xep0184_id = id_
-            else:
-                xep0184_id = None
+            xep0184_id = None
+            if self.contact.jid != gajim.get_jid_from_account(self.account):
+                if gajim.config.get_per('accounts', self.account, 'request_receipt'):
+                    xep0184_id = id_
             if label:
                 displaymarking = label.getTag('displaymarking')
             else:
@@ -2696,6 +2698,10 @@ class ChatControl(ChatControlBase):
         chatstate_setting = gajim.config.get('outgoing_chat_state_notifications')
         if chatstate_setting == 'disabled':
             return
+
+        if self.contact.jid == gajim.get_jid_from_account(self.account):
+            return
+
         elif chatstate_setting == 'composing_only' and state != 'active' and\
                 state != 'composing':
             return

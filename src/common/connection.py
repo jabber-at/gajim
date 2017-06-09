@@ -298,6 +298,8 @@ class CommonConnection:
                         'to %s, this JID is not valid.') % j))
                     return
             fjid = new_list
+        elif jid == gajim.get_jid_from_account(self.name):
+            fjid = jid
         else:
             try:
                 jid = self.check_jid(jid)
@@ -409,6 +411,8 @@ class CommonConnection:
             id_ = correction_msg.getID()
             if correction_msg.getTag('replace'):
                 correction_msg.delChild('replace')
+            if correction_msg.getTag('delay'):
+                correction_msg.delChild('delay')
             correction_msg.setTag('replace', attrs={'id': id_},
                 namespace=nbxmpp.NS_CORRECT)
             id2 = self.connection.getAnID()
@@ -502,10 +506,10 @@ class CommonConnection:
                 msg_iq.setTag(chatstate, namespace=nbxmpp.NS_CHATSTATES)
 
             # XEP-0184
-            if msgtxt and gajim.config.get_per('accounts', self.name,
-            'request_receipt') and contact and contact.supports(
-            nbxmpp.NS_RECEIPTS):
-                msg_iq.setTag('request', namespace=nbxmpp.NS_RECEIPTS)
+            if jid != gajim.get_jid_from_account(self.name):
+                if msgtxt and gajim.config.get_per('accounts', self.name,
+                'request_receipt'):
+                    msg_iq.setTag('request', namespace=nbxmpp.NS_RECEIPTS)
 
             if forward_from:
                 addresses = msg_iq.addChild('addresses',
@@ -2441,10 +2445,11 @@ class Connection(CommonConnection, ConnectionHandlers):
                     self.blocked_groups.append(rule['value'])
             self.blocked_list.append(rule)
 
-            if rule['type'] == 'jid':
-                roster.draw_contact(rule['value'], self.name)
-            if rule['type'] == 'group':
-                roster.draw_group(rule['value'], self.name)
+            if 'type' in rule:
+                if rule['type'] == 'jid':
+                    roster.draw_contact(rule['value'], self.name)
+                if rule['type'] == 'group':
+                    roster.draw_group(rule['value'], self.name)
 
     def _request_bookmarks_xml(self):
         if not gajim.account_is_connected(self.name):
@@ -2734,6 +2739,8 @@ class Connection(CommonConnection, ConnectionHandlers):
             id_ = obj.correction_msg.getID()
             if obj.correction_msg.getTag('replace'):
                 obj.correction_msg.delChild('replace')
+            if obj.correction_msg.getTag('delay'):
+                obj.correction_msg.delChild('delay')
             obj.correction_msg.setTag('replace', attrs={'id': id_},
                                       namespace=nbxmpp.NS_CORRECT)
             id2 = self.connection.getAnID()

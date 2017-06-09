@@ -495,7 +495,8 @@ class Logger:
             all_messages.append(results[0] + (shown,))
         return all_messages
 
-    def write(self, kind, jid, message=None, show=None, tim=None, subject=None):
+    def write(self, kind, jid, message=None, show=None, tim=None, subject=None,
+              mam_query=False):
         """
         Write a row (status, gcstatus, message etc) to logs database
 
@@ -568,7 +569,7 @@ class Logger:
             except exceptions.PysqliteOperationalError, e:
                 raise exceptions.PysqliteOperationalError(str(e))
             if kind == 'chat_msg_recv':
-                if not self.jid_is_from_pm(jid):
+                if not self.jid_is_from_pm(jid) and not mam_query:
                     # Save in unread table only if it's not a pm
                     write_unread = True
 
@@ -597,11 +598,11 @@ class Logger:
         # How many lines to restore and when to time them out
         restore_how_many = gajim.config.get('restore_lines')
         if restore_how_many <= 0:
-            return
+            return []
         timeout = gajim.config.get('restore_timeout')  # in minutes
 
         now = int(float(time.time()))
-        if timeout != 0:
+        if timeout > 0:
             timeout = now - (timeout * 60) # before that they are too old
         # so if we ask last 5 lines and we have 2 pending we get
         # 3 - 8 (we avoid the last 2 lines but we still return 5 asked)
@@ -1148,7 +1149,7 @@ class Logger:
             log.debug('Log already in DB, ignoring it')
             return
         log.debug('New log received from server archives, storing it')
-        self.write(type_, with_, message=msg, tim=tim)
+        self.write(type_, with_, message=msg, tim=tim, mam_query=True)
 
     def _nec_gc_message_received(self, obj):
         tim_f = float(time.mktime(obj.timestamp))

@@ -294,7 +294,7 @@ class Config:
             'max_conversation_lines': [opt_int, 500, _('Maximum number of lines that are printed in conversations. Oldest lines are cleared.')],
             'attach_notifications_to_systray': [opt_bool, False, _('If True, notification windows from notification-daemon will be attached to notification icon.')],
             'check_idle_every_foo_seconds': [opt_int, 2, _('Choose interval between 2 checks of idleness.')],
-            'uri_schemes': [opt_str, 'aaa:// aaas:// acap:// cap:// cid: crid:// data: dav: dict:// dns: fax: file:/ ftp:// geo: go: gopher:// h323: http:// https:// iax: icap:// im: imap:// info: ipp:// iris: iris.beep: iris.xpc: iris.xpcs: iris.lwz: ldap:// mid: modem: msrp:// msrps:// mtqp:// mupdate:// news: nfs:// nntp:// opaquelocktoken: pop:// pres: prospero:// rtsp:// service: shttp:// sip: sips: sms: snmp:// soap.beep:// soap.beeps:// tag: tel: telnet:// tftp:// thismessage:/ tip:// tv: urn:// vemmi:// xmlrpc.beep:// xmlrpc.beeps:// z39.50r:// z39.50s:// about: apt: cvs:// daap:// ed2k:// feed: fish:// git:// iax2: irc:// ircs:// ldaps:// magnet: mms:// rsync:// ssh:// svn:// sftp:// smb:// webcal://', _('Valid uri schemes. Only schemes in this list will be accepted as "real" uri. (mailto and xmpp are handled separately)'), True],
+            'uri_schemes': [opt_str, 'aaa:// aaas:// acap:// cap:// cid: crid:// data: dav: dict:// dns: fax: file:/ ftp:// geo: go: gopher:// h323: http:// https:// iax: icap:// im: imap:// info: ipp:// iris: iris.beep: iris.xpc: iris.xpcs: iris.lwz: ldap:// mid: modem: msrp:// msrps:// mtqp:// mupdate:// news: nfs:// nntp:// opaquelocktoken: pop:// pres: prospero:// rtsp:// service: shttp:// sip: sips: sms: snmp:// soap.beep:// soap.beeps:// tag: tel: telnet:// tftp:// thismessage:/ tip:// tv: urn:// vemmi:// xmlrpc.beep:// xmlrpc.beeps:// z39.50r:// z39.50s:// about: apt: cvs:// daap:// ed2k:// feed: fish:// git:// iax2: irc:// ircs:// ldaps:// magnet: mms:// rsync:// ssh:// svn:// sftp:// smb:// webcal:// aesgcm://', _('Valid uri schemes. Only schemes in this list will be accepted as "real" uri. (mailto and xmpp are handled separately)'), True],
             'ask_offline_status_on_connection': [ opt_bool, False, _('Ask offline status message to all offline contacts when connection to an account is established. WARNING: This causes a lot of requests to be sent!') ],
             'shell_like_completion': [ opt_bool, False, _('If True, completion in groupchats will be like a shell auto-completion')],
             'show_self_contact': [opt_str, 'when_other_resource', _('When is self contact row displayed. Can be "always", "when_other_resource" or "never"'), True],
@@ -314,6 +314,8 @@ class Config:
             'ignore_incoming_attention': [opt_bool, False, _('If True, Gajim will ignore incoming attention requestd ("wizz").')],
             'remember_opened_chat_controls': [ opt_bool, True, _('If enabled, Gajim will reopen chat windows that were opened last time Gajim was closed.')],
             'positive_184_ack': [ opt_bool, False, _('If enabled, Gajim will show an icon to show that sent message has been received by your contact')],
+            'pgp_encoding': [ opt_str, '', _('Sets the encoding used by python-gnupg'), True],
+            'remote_commands': [opt_bool, False, _('If True, Gajim will execute XEP-0146 Commands.')],
     }, {})
 
     __options_per_key = {
@@ -376,7 +378,7 @@ class Config:
                     'http_auth': [opt_str, 'ask'], # yes, no, ask
                     'dont_ack_subscription': [opt_bool, False, _('Jabberd2 workaround')],
                     # proxy65 for FT
-                    'file_transfer_proxies': [opt_str, 'proxy.eu.jabber.org, proxy.jabber.ru, proxy.jabbim.cz'],
+                    'file_transfer_proxies': [opt_str, ''],
                     'use_ft_proxies': [opt_bool, True, _('If checked, Gajim will use your IP and proxies defined in file_transfer_proxies option for file transfer.'), True],
                     'test_ft_proxies_on_startup': [opt_bool, True, _('If True, Gajim will test file transfer proxies on startup to be sure it works. Openfire\'s proxies are known to fail this test even if they work.')],
                     'msgwin-x-position': [opt_int, -1], # Default is to let the wm decide

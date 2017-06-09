@@ -31,6 +31,7 @@ import os
 import logging
 import locale
 import uuid
+from distutils.version import LooseVersion as V
 
 import config
 import nbxmpp
@@ -160,7 +161,19 @@ except ImportError:
 HAVE_GPG = True
 GPG_BINARY = 'gpg'
 try:
-    __import__('gnupg')
+    import gnupg
+    '''
+    We need https://pypi.python.org/pypi/python-gnupg
+    but https://pypi.python.org/pypi/gnupg shares the same package name.
+    It cannot be used as a drop-in replacement.
+    We test with a version check if python-gnupg is installed as it is
+    on a much lower version number than gnupg
+    Also we need at least python-gnupg 0.3.8
+    '''
+    v_gnupg = gnupg.__version__
+    if V(v_gnupg) < V('0.3.8') or V(v_gnupg) > V('1.0.0'):
+        log.info('Gajim needs python-gnupg >= 0.3.8')
+        HAVE_GPG = False
 except ImportError:
     HAVE_GPG = False
 else:
@@ -406,13 +419,16 @@ def jid_is_transport(jid):
         return True
     return False
 
-def get_jid_from_account(account_name):
+def get_jid_from_account(account_name, full=False):
     """
     Return the jid we use in the given account
     """
     name = config.get_per('accounts', account_name, 'name')
     hostname = config.get_per('accounts', account_name, 'hostname')
     jid = name + '@' + hostname
+    if full:
+        resource = connections[account_name].server_resource
+        jid += '/' + resource
     return jid
 
 def get_our_jids():
