@@ -8,6 +8,8 @@ gajim (0.16.8-0.1) unstable; urgency=low
     * pyasn1 is now a dependency.
     * dbus and python-dbus are now recommended and no longer a dependency.
     * Drop farstream from suggestions.
+    * debian/rules: remove rules meant to create the now deprecated Debian
+      menu icon.
 
  -- Mathias Ertl <mati@jabber.at>  Fri, 09 Jun 2017 11:52:27 +0200
 
